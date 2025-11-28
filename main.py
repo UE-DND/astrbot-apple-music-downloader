@@ -175,7 +175,7 @@ class AppleMusicDownloader(Star):
         
         quality_display = {
             'alac': '无损 ALAC',
-            'aac': '高品质 AAC', 
+            'aac': '高品质 AAC',
             'atmos': '杜比全景声'
         }.get(quality_str, quality_str)
         
