@@ -162,38 +162,6 @@ class AppleMusicDownloader(Star):
     @am_group.command("dl", alias={"download", "下载"})
     async def download_music(self, event: AstrMessageEvent, url: str, 
                              quality: str = ""):
-        """下载 Apple Music 单曲
-        
-        用法: /am dl <单曲链接> [音质]
-        音质可选: alac / aac / atmos
-        
-        示例:
-        /am dl https://music.apple.com/cn/album/xxx/123456?i=789
-        /am dl https://music.apple.com/cn/album/xxx/123456?i=789 alac
-        
-        注意: 仅支持单曲下载
-        """
-        parsed = URLParser.parse(url)
-        if not parsed:
-            yield event.plain_result(
-                "× 无效的 Apple Music 链接\n\n"
-                "仅支持单曲链接格式:\n"
-                "• 单曲: https://music.apple.com/cn/album/xxx/123456?i=789\n\n"
-                "* 提示: 单曲链接必须包含 ?i= 参数"
-            )
-            return
-        
-        if parsed['type'] != 'song':
-            type_display = URLParser.get_type_display(parsed['type'])
-            yield event.plain_result(
-                f"× 不支持下载{type_display}\n\n"
-                f"本插件仅支持下载单曲，请提供单曲链接。\n\n"
-                f"* 提示:\n"
-                f"• 单曲链接格式: https://music.apple.com/cn/album/xxx/123456?i=789\n"
-                f"• 在 Apple Music 中打开歌曲，分享链接即可获得单曲链接"
-            )
-            return
-        
         dl_config = self.config.get("downloader_config", {})
         default_quality = dl_config.get("default_quality", "alac")
         
