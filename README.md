@@ -96,15 +96,10 @@
 # 在仓库根目录运行以下所有命令
 
 # 更新插件本体
-$branch = git rev-parse --abbrev-ref HEAD
-git fetch origin --prune
-git reset --hard origin/$branch
+git fetch && git reset --hard origin/master
 
 # 更新插件子模块
-git submodule sync --recursive
-git submodule foreach --recursive 'git reset --hard'
-git submodule foreach --recursive 'git clean -fdx'
-git submodule update --init --recursive --remote --force
+cd apple-music-downloader && git fetch && git reset --hard origin/master && cd ..
 ```
 
 ## ⚠️ 注意
