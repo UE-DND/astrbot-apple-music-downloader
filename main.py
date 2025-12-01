@@ -103,20 +103,21 @@ class AppleMusicDownloader(Star):
         """清理所有下载的文件"""
         if not self.docker_service:
             logger.warning("Docker 服务未初始化，无法清理下载目录")
-            return 0
+            return 0, 0
 
         try:
             download_dirs = self.docker_service.get_download_dirs()
         except Exception as e:
             logger.error(f"获取下载目录失败: {e}")
-            return 0
+            return 0, 0
 
         if not download_dirs:
             logger.info("未找到下载目录配置，无需清理")
-            return 0
+            return 0, 0
 
         cleaned_count = 0
-        had_items = False
+        error_count = 0
+        total_items = 0
 
         for downloads_dir in download_dirs:
             try:
@@ -125,10 +126,13 @@ class AppleMusicDownloader(Star):
                     continue
 
                 items = list(downloads_dir.iterdir())
+
+                items = [i for i in items if i.name != ".gitkeep"]
+
                 if not items:
                     continue
 
-                had_items = True
+                total_items += len(items)
 
                 for item in items:
                     try:
@@ -138,8 +142,10 @@ class AppleMusicDownloader(Star):
                             shutil.rmtree(item)
                         cleaned_count += 1
                     except PermissionError:
+                        error_count += 1
                         logger.warning(f"权限不足，无法清理 {item}")
                     except Exception as e:
+                        error_count += 1
                         logger.warning(f"清理文件失败 {item}: {e}")
             except Exception as e:
                 logger.warning(f"清理目录 {downloads_dir} 时出错: {e}")
@@ -147,12 +153,12 @@ class AppleMusicDownloader(Star):
 
         if cleaned_count > 0:
             logger.info(f"定时清理完成，共清理 {cleaned_count} 个文件/文件夹")
-        elif had_items:
-            logger.info("下载目录已为空，无需清理")
+        elif error_count > 0:
+            logger.warning(f"清理结束，但有 {error_count} 个文件清理失败")
         else:
-            logger.info("未找到可清理的文件")
+            logger.info("下载目录已为空，无需清理")
 
-        return cleaned_count
+        return cleaned_count, error_count
 
     @filter.command("am", alias={"applemusic", "apple"})
     async def download_music(
@@ -220,7 +226,7 @@ class AppleMusicDownloader(Star):
 
             try:
                 yield event.plain_result(
-                    f"♪ 开始下载单曲{f' [{song_name}]' if song_name else ''}\n"
+                    f"♪ 开始下载单曲{f'【{song_name}】' if song_name else ''}\n"
                     f"> 音质: {quality_display}\n"
                     f"○ 请稍候..."
                 )
@@ -230,7 +236,7 @@ class AppleMusicDownloader(Star):
                 )
 
                 if result.success:
-                    success_msg = f"√ 下载完成！\n> 共 {len(result.file_paths)} 个文件 \n> 文件将在稍后发送，需要等待一段时间"
+                    success_msg = f"√ 下载完成！\n> 文件将在稍后发送，需要等待一段时间"
                     yield event.plain_result(success_msg)
 
                     await self._send_downloaded_files(event, result)
@@ -415,14 +421,19 @@ class AppleMusicDownloader(Star):
         """手动清理下载文件"""
         yield event.plain_result("> 正在清理下载文件...")
 
-        cleaned_count = await self._cleanup_downloads()
+        cleaned_count, error_count = await self._cleanup_downloads()
 
+        msg = []
         if cleaned_count > 0:
-            yield event.plain_result(
-                f"√ 清理完成，共清理 {cleaned_count} 个文件/文件夹"
-            )
-        else:
-            yield event.plain_result("√ 下载目录已清空，无需清理")
+            msg.append(f"√ 清理完成，共删除 {cleaned_count} 个项目")
+
+        if error_count > 0:
+            msg.append(f"! 有 {error_count} 个文件清理失败（可能被占用或权限不足）")
+
+        if cleaned_count == 0 and error_count == 0:
+            msg.append("√ 下载目录已为空，无需清理")
+
+        yield event.plain_result("\n".join(msg))
 
     @filter.command("amdl", alias={"am下载"})
     async def quick_download(
