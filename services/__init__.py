@@ -9,13 +9,15 @@ from .downloader import (
     DownloadResult,
     ServiceStatus,
     URLParser,
+    MetadataFetcher,
 )
 
 __all__ = [
-    'ConfigGenerator',
-    'DockerService',
-    'DownloadQuality', 
-    'DownloadResult',
-    'ServiceStatus',
-    'URLParser',
+    "ConfigGenerator",
+    "DockerService",
+    "DownloadQuality",
+    "DownloadResult",
+    "ServiceStatus",
+    "URLParser",
+    "MetadataFetcher",
 ]
