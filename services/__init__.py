@@ -9,6 +9,7 @@ from .downloader import (
     DownloadResult,
     ServiceStatus,
     URLParser,
+    MetadataFetcher,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "DownloadResult",
     "ServiceStatus",
     "URLParser",
+    "MetadataFetcher",
 ]

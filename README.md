@@ -93,13 +93,15 @@
 由于本仓库含有子模块，无法通过直接拉取的方式更新。建议在每个版本发布后同时更新子模块。
 
 ```bash
-# 在仓库根目录运行以下所有命令
+# 在仓库根目录运行以下所有命令，或其它安全的更新方式
 
 # 更新插件本体
 git fetch && git reset --hard origin/master
 
 # 更新插件子模块
 cd apple-music-downloader && git fetch && git reset --hard origin/master && cd ..
+
+# 更新后会删除配置文件，重启 AstrBot 以重新生成
 ```
 
 ## ⚠️ 注意
