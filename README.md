@@ -86,7 +86,7 @@
 
 1. 确保 Docker 已启动
 2. 进入后端手动[构建镜像](#安装步骤)
-3. 发送 `/am status` 检查服务状态
+3. 发送 `/am_status` 检查服务状态
 
 ## 更新插件
 
@@ -110,6 +110,4 @@ cd apple-music-downloader && git fetch && git reset --hard origin/master && cd .
 - 下载的文件每 24 小时将被自动删除
 - 文件过大时，将保存到服务器而不会发送
 
----
-
-## 感谢所有上游开发者的贡献！
+## 感谢所有上游开发者的贡献
