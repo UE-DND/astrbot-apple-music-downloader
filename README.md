@@ -13,7 +13,7 @@
 
    ```bash
    cd AstrBot/data/plugins
-   git clone --recurse-submodules https://gh.llkk.cc/https://github.com/UE-DND/astrbot_apple_music_downloader.git
+   git clone --recurse-submodules https://gh-proxy.com/https://github.com/UE-DND/astrbot_apple_music_downloader.git
    ```
 
 2. 进入核心下载器，配置 `config.yaml`
@@ -37,12 +37,16 @@
 
 | 指令 | 说明 | 示例 |
 |:------|:------|:------:|
-| `/am 链接 音质` | 下载单曲 | `/am https://music.apple.com/cn/album/青春コンプレックス/1657318546?i=1657318551` |
-| `/am_clean` | 清理所有下载文件 | `/am_clean` |
+| `/am` | 交互式下载 | `/am` |
+| `/am <链接> [音质]` | 直接下载单曲 | `/am https://music.apple.com/cn/album/青春コンプレックス/1657318546?i=1657318551` |
+| `/am_queue` | 查看下载队列 | `/am_queue` |
+| `/am_mytasks` | 查看我的任务 | `/am_mytasks` |
+| `/am_cancel` | 取消下载任务 | `/am_cancel <任务ID>` |
 | `/am_status` | 查看服务状态 | `/am_status` |
 | `/am_start` | 启动服务 | `/am_start` |
 | `/am_stop` | 停止服务 | `/am_stop` |
 | `/am_build` | 构建镜像 | `/am_build` |
+| `/am_clean` | 清理下载文件 | `/am_clean` |
 | `/am_help` | 显示帮助 | `/am_help` |
 
 ### 音质选项
@@ -85,8 +89,17 @@
 首次使用时，插件会自动构建 Docker 镜像，这可能需要 5-10 分钟。
 
 1. 确保 Docker 已启动
-2. 进入后端手动[构建镜像](#安装步骤)
+2. 进入后端手动[构建镜像](#安装步骤)并登录账号
 3. 发送 `/am_status` 检查服务状态
+
+## 向歌曲中写入歌词
+
+> 歌词下载需要使用 Cookie。具体操作如下：
+
+1. 登录网页版 Apple Music
+2. 打开开发者工具，点击 `应用程序` -> `存储` -> `Cookies` -> `https://music.apple.com`
+3. 找到名为 `media-user-token` 的 Cookie 并复制
+4. 在插件配置中粘贴 Cookie 值
 
 ## 更新插件
 
@@ -101,13 +114,13 @@ git fetch && git reset --hard origin/master
 # 更新插件子模块
 cd apple-music-downloader && git fetch && git reset --hard origin/master && cd ..
 
-# 更新后会删除配置文件，重启 AstrBot 以重新生成
+# 某些更新方式可能会删除配置文件，重启 AstrBot 以重新生成
 ```
 
 ## ⚠️ 注意
 
 - 部分曲目可能因地区限制不可用
-- 下载的文件每 24 小时将被自动删除
 - 文件过大时，将保存到服务器而不会发送
+- 此项目仅供技术交流，下载文件默认将于24小时内自动删除
 
 ## 感谢所有上游开发者的贡献

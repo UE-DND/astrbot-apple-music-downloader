@@ -5,6 +5,55 @@
     "default": "apple-music-downloader",
     "hint": "相对于插件目录或绝对路径，包含 Dockerfile.downloader、config.yaml 等文件"
   },
+  "queue_config": {
+    "description": "下载队列配置",
+    "type": "object",
+    "hint": "控制下载任务的排队和执行行为",
+    "items": {
+      "max_queue_size": {
+        "description": "最大队列长度",
+        "type": "int",
+        "default": 10,
+        "hint": "最多允许多少个任务排队等待"
+      },
+      "task_timeout": {
+        "description": "任务超时时间（秒）",
+        "type": "int",
+        "default": 120,
+        "hint": "单个下载任务的最大执行时间"
+      },
+      "queue_timeout": {
+        "description": "队列等待超时（秒）",
+        "type": "int",
+        "default": 600,
+        "hint": "任务在队列中等待的最大时间，超时自动取消"
+      },
+      "notify_progress": {
+        "description": "推送进度通知",
+        "type": "bool",
+        "default": true,
+        "hint": "是否向用户主动推送队列进度变化通知"
+      },
+      "notify_queue_position": {
+        "description": "推送队列位置变化",
+        "type": "bool",
+        "default": true,
+        "hint": "是否在队列位置变化时通知用户（可能产生较多消息）"
+      },
+      "allow_cancel": {
+        "description": "允许取消任务",
+        "type": "bool",
+        "default": true,
+        "hint": "是否允许用户取消自己的排队任务"
+      },
+      "max_tasks_per_user": {
+        "description": "每用户最大排队数",
+        "type": "int",
+        "default": 2,
+        "hint": "单个用户最多同时排队的任务数量"
+      }
+    }
+  },
   "auto_start_wrapper": {
     "description": "是否自启动 Wrapper 服务",
     "type": "bool",
@@ -16,6 +65,12 @@
     "type": "int",
     "default": 120,
     "hint": "单曲下载最长等待时间，超时将取消任务"
+  },
+  "max_retries": {
+    "description": "下载失败重试次数",
+    "type": "int",
+    "default": 1,
+    "hint": "下载失败时自动重试的最大次数，设为 0 禁用重试"
   },
   "max_file_size_mb": {
     "description": "最大发送文件大小（MB）",
