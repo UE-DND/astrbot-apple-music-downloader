@@ -206,7 +206,8 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+.spec-workflow/
+.claude/
+CLAUDE.md
 docs/
-.github/
-GEMINI.md
 AGENTS.md

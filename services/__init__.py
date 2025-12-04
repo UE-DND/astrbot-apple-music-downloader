@@ -11,8 +11,16 @@ from .downloader import (
     URLParser,
     MetadataFetcher,
 )
+from .queue import (
+    DownloadQueue,
+    DownloadTask,
+    TaskStatus,
+    TaskPriority,
+    QueueStats,
+)
 
 __all__ = [
+    # downloader
     "ConfigGenerator",
     "DockerService",
     "DownloadQuality",
@@ -20,4 +28,10 @@ __all__ = [
     "ServiceStatus",
     "URLParser",
     "MetadataFetcher",
+    # queue
+    "DownloadQueue",
+    "DownloadTask",
+    "TaskStatus",
+    "TaskPriority",
+    "QueueStats",
 ]
