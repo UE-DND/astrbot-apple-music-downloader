@@ -36,6 +36,9 @@ class DownloadResult:
     cover_path: Optional[str] = None
     track_info: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    # 文件发送状态（由队列处理器设置）
+    files_sent: bool = False
+    send_error: Optional[str] = None
 
 
 @dataclass
