@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  wrapper:
+    image: apple-music-wrapper
+    container_name: apple-music-wrapper
+    build:
+      context: ./wrapper
+      dockerfile: Dockerfile
+    volumes:
+      - ./wrapper/rootfs/data:/app/rootfs/data
+    ports:
+      - "10020:10020"
+      - "20020:20020"
+    environment:
+      - args=-H 0.0.0.0
+    restart: unless-stopped
+    networks:
+      - apple-music-net
+
+  downloader:
+    image: apple-music-downloader
+    container_name: apple-music-downloader
+    build:
+      context: .
+      dockerfile: Dockerfile.downloader
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - ./AM-DL downloads:/downloads
+      - ./config.yaml:/app/config.yaml
+    depends_on:
+      - wrapper
+    networks:
+      - apple-music-net
+    stdin_open: true
+    tty: true
+    profiles:
+      - manual
+
+networks:
+  apple-music-net:
+    driver: bridge
+

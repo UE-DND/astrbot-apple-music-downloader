@@ -1,0 +1,68 @@
+FROM golang:1.23-bookworm AS builder
+
+ENV GOPROXY=https://goproxy.cn,direct
+
+RUN set -eux; \
+    if [ -f /etc/apt/sources.list ]; then \
+        sed -i -E 's#https?://[^ ]*deb.debian.org/debian#https://mirrors.tuna.tsinghua.edu.cn/debian#g; s#https?://security.debian.org/debian-security#https://mirrors.tuna.tsinghua.edu.cn/debian-security#g' /etc/apt/sources.list; \
+    fi; \
+    if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i -E 's#https?://[^ ]*deb.debian.org/debian#https://mirrors.tuna.tsinghua.edu.cn/debian#g; s#https?://security.debian.org/debian-security#https://mirrors.tuna.tsinghua.edu.cn/debian-security#g' /etc/apt/sources.list.d/debian.sources; \
+    fi
+
+RUN apt-get update && apt-get install -y \
+    git \
+    gcc \
+    libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o apple-music-downloader main.go
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN sed -i 's@//.*archive.ubuntu.com@//mirrors.aliyun.com@g' /etc/apt/sources.list && \
+    sed -i 's@//.*security.ubuntu.com@//mirrors.aliyun.com@g' /etc/apt/sources.list
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    ffmpeg \
+    gpac \
+    curl \
+    bash \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN BENTO4_VERSION="1-6-0-641" && \
+    curl -L -o /tmp/bento4.zip \
+    "https://www.bok.net/Bento4/binaries/Bento4-SDK-${BENTO4_VERSION}.x86_64-unknown-linux.zip" && \
+    unzip -q /tmp/bento4.zip -d /tmp && \
+    cp /tmp/Bento4-SDK-*/bin/mp4decrypt /usr/local/bin/ && \
+    chmod +x /usr/local/bin/mp4decrypt && \
+    rm -rf /tmp/bento4.zip /tmp/Bento4-SDK-*
+
+RUN echo "* * *验证工具安装* * *" && \
+    MP4Box -version && \
+    mp4decrypt 2>&1 | head -n 1 && \
+    ffmpeg -version | head -n 1 && \
+    echo "* * *所有工具已安装* * *"
+
+WORKDIR /app
+
+COPY --from=builder /app/apple-music-downloader /usr/local/bin/apple-music-downloader
+RUN chmod +x /usr/local/bin/apple-music-downloader
+
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+RUN mkdir -p /app/downloads /app/config
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
