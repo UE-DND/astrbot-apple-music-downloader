@@ -2,9 +2,9 @@
   "wrapper_mode": {
     "description": "Wrapper 服务模式",
     "type": "string",
-    "default": "docker",
-    "options": ["docker", "remote", "qemu"],
-    "hint": "docker: 本地 Docker 容器（推荐）; remote: 远程服务（公共实例 wm.wol.moe）; qemu: 本地 QEMU 实例"
+    "default": "native",
+    "options": ["native", "remote"],
+    "hint": "native:（推荐）; remote: 远程服务（wm.wol.moe）"
   },
   "wrapper_url": {
     "description": "Wrapper-Manager 服务地址",
@@ -17,92 +17,6 @@
     "type": "bool",
     "default": false,
     "hint": "是否使用 TLS/SSL 连接，公共实例(wm.wol.moe)需设为 true"
-  },
-  "qemu_config": {
-    "description": "QEMU 本地实例配置",
-    "type": "object",
-    "hint": "仅在 wrapper_mode 为 qemu 时生效",
-    "items": {
-      "enable_hw_accel": {
-        "description": "启用硬件加速",
-        "type": "bool",
-        "default": false,
-        "hint": "需要系统支持 KVM 或 HAXM"
-      },
-      "hw_accelerator": {
-        "description": "硬件加速器类型",
-        "type": "string",
-        "default": "",
-        "hint": "kvm, haxm, hvf 等，留空自动检测"
-      },
-      "memory_size": {
-        "description": "内存大小",
-        "type": "string",
-        "default": "512M",
-        "hint": "分配给 QEMU 实例的内存"
-      },
-      "cpu_model": {
-        "description": "CPU 模型",
-        "type": "string",
-        "default": "Cascadelake-Server-v5"
-      },
-      "show_window": {
-        "description": "显示窗口",
-        "type": "bool",
-        "default": false,
-        "hint": "是否显示 QEMU 图形窗口"
-      }
-    }
-  },
-  "docker_config": {
-    "description": "Docker 容器配置",
-    "type": "object",
-    "hint": "仅在 wrapper_mode 为 docker 时生效（使用 wrapper-manager）",
-    "items": {
-      "auto_deploy": {
-        "description": "自动部署模式",
-        "type": "string",
-        "default": "auto",
-        "options": ["auto", "manual"],
-        "hint": "auto: 自动克隆源码并构建镜像; manual: 需手动运行 setup.sh 初始化"
-      },
-      "auto_update": {
-        "description": "自动更新 Wrapper-Manager",
-        "type": "bool",
-        "default": true,
-        "hint": "启动时自动检查并更新 wrapper-manager（仅 auto 模式生效）"
-      },
-      "use_proxy": {
-        "description": "使用 GitHub 代理/镜像",
-        "type": "bool",
-        "default": true,
-        "hint": "中国用户建议开启，下载时使用代理加速"
-      },
-      "proxy_url": {
-        "description": "代理地址",
-        "type": "string",
-        "default": "https://gh-proxy.com",
-        "hint": "GitHub 代理地址，留空使用默认代理"
-      },
-      "container_name": {
-        "description": "容器名称",
-        "type": "string",
-        "default": "apple-music-wrapper-manager",
-        "hint": "Wrapper-Manager 容器的名称"
-      },
-      "image_name": {
-        "description": "镜像名称",
-        "type": "string",
-        "default": "apple-music-wrapper-manager",
-        "hint": "Wrapper-Manager 镜像名称"
-      },
-      "grpc_port": {
-        "description": "gRPC 服务端口",
-        "type": "int",
-        "default": 18923,
-        "hint": "Wrapper-Manager gRPC 服务端口"
-      }
-    }
   },
   "queue_config": {
     "description": "下载队列配置",

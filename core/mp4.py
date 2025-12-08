@@ -5,6 +5,7 @@ MP4 Processing Module
 Handles M3U8 extraction, audio extraction, encapsulation, and metadata writing.
 """
 
+import os
 import subprocess
 import uuid
 from io import BytesIO
@@ -163,18 +164,40 @@ def extract_song(raw_song: bytes, codec: str) -> SongInfo:
     media_name = (Path(tmp_dir.name) / Path(mp4_name).with_suffix('.media')).absolute()
 
     # Extract NHML using gpac
+    # Try to find gpac in common locations
+    gpac_cmd = "gpac"
+    if os.path.exists(r"C:\Program Files\GPAC\gpac.exe"):
+        gpac_cmd = r'"C:\Program Files\GPAC\gpac.exe"'
+
     subprocess.run(
-        f"gpac -i {raw_mp4.absolute()} nhmlw:pckp=true -o {nhml_name}",
+        f"{gpac_cmd} -i {raw_mp4.absolute()} nhmlw:pckp=true -o {nhml_name}",
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=if_shell()
     )
 
     xml_name = (Path(tmp_dir.name) / Path(mp4_name).with_suffix('.xml')).absolute()
 
     # Extract ISO info using MP4Box
+    mp4box_cmd = "MP4Box"
+    if os.path.exists(r"C:\Program Files\GPAC\MP4Box.exe"):
+        mp4box_cmd = r'"C:\Program Files\GPAC\MP4Box.exe"'
+
     subprocess.run(
-        f"MP4Box -diso {raw_mp4.absolute()} -out {xml_name}",
+        f"{mp4box_cmd} -diso {raw_mp4.absolute()} -out {xml_name}",
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=if_shell()
     )
+
+    # Find mp4extract (Bento4 tool)
+    mp4extract_cmd = "mp4extract"
+    # Check common locations for Bento4
+    bento4_paths = [
+        Path(__file__).parent.parent / "binaries" / "bento4" / "Bento4-SDK-1-6-0-641.x86_64-microsoft-win32" / "bin" / "mp4extract.exe",
+        Path(r"C:\Program Files\Bento4\mp4extract.exe"),
+        Path(r"C:\Bento4\bin\mp4extract.exe"),
+    ]
+    for bento4_path in bento4_paths:
+        if bento4_path.exists():
+            mp4extract_cmd = f'"{bento4_path}"'
+            break
 
     decoder_params = None
 
@@ -192,12 +215,24 @@ def extract_song(raw_song: bytes, codec: str) -> SongInfo:
     match codec:
         case Codec.ALAC:
             alac_atom_name = (Path(tmp_dir.name) / Path(mp4_name).with_suffix('.atom')).absolute()
-            subprocess.run(
-                f"mp4extract moov/trak/mdia/minf/stbl/stsd/enca[0]/alac {raw_mp4.absolute()} {alac_atom_name}",
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=if_shell()
+            mp4extract_cmd_str = f"{mp4extract_cmd} moov/trak/mdia/minf/stbl/stsd/enca[0]/alac {raw_mp4.absolute()} {alac_atom_name}"
+            print(f"[DEBUG extract_song] mp4extract command: {mp4extract_cmd_str}")
+            result = subprocess.run(
+                mp4extract_cmd_str,
+                capture_output=True, shell=if_shell()
             )
+            print(f"[DEBUG extract_song] mp4extract return code: {result.returncode}")
+            if result.stderr:
+                print(f"[DEBUG extract_song] mp4extract stderr: {result.stderr.decode('utf-8', errors='ignore')}")
+            if not alac_atom_name.exists():
+                print(f"[DEBUG extract_song] ERROR: ALAC atom file not created!")
+            else:
+                print(f"[DEBUG extract_song] ALAC atom file size: {alac_atom_name.stat().st_size} bytes")
             with open(alac_atom_name, "rb") as f:
                 decoder_params = f.read()
+            print(f"[DEBUG extract_song] decoderParams length: {len(decoder_params)} bytes")
+            # Print first 48 bytes in hex for analysis
+            print(f"[DEBUG extract_song] decoderParams hex (first 48): {decoder_params[:48].hex()}")
 
         case Codec.AAC | Codec.AAC_DOWNMIX | Codec.AAC_BINAURAL | Codec.AAC_LEGACY:
             info_name = (Path(tmp_dir.name) / Path(mp4_name).with_suffix('.info')).absolute()
@@ -272,6 +307,29 @@ def encapsulate(song_info: SongInfo, decrypted_media: bytes, atmos_convert: bool
 
     song_name = Path(tmp_dir.name) / Path(name).with_suffix(get_suffix(song_info.codec, atmos_convert))
 
+    # Find GPAC tools (gpac.exe on Windows)
+    gpac_cmd = "gpac"
+    gpac_paths = [
+        Path(r"C:\Program Files\GPAC\gpac.exe"),
+        Path(__file__).parent.parent / "binaries" / "gpac" / "gpac.exe",
+    ]
+    for gpac_path in gpac_paths:
+        if gpac_path.exists():
+            gpac_cmd = f'"{gpac_path}"'
+            break
+
+    # Find Bento4 mp4edit tool
+    mp4edit_cmd = "mp4edit"
+    bento4_paths = [
+        Path(__file__).parent.parent / "binaries" / "bento4" / "Bento4-SDK-1-6-0-641.x86_64-microsoft-win32" / "bin" / "mp4edit.exe",
+        Path(r"C:\Program Files\Bento4\mp4edit.exe"),
+        Path(r"C:\Bento4\bin\mp4edit.exe"),
+    ]
+    for bento4_path in bento4_paths:
+        if bento4_path.exists():
+            mp4edit_cmd = f'"{bento4_path}"'
+            break
+
     match song_info.codec:
         case Codec.ALAC:
             nhml_name = Path(tmp_dir.name) / Path(f"{name}.nhml")
@@ -280,21 +338,43 @@ def encapsulate(song_info: SongInfo, decrypted_media: bytes, atmos_convert: bool
                 nhml_xml.NHNTStream["baseMediaFile"] = media.name
                 f.write(str(nhml_xml))
 
-            subprocess.run(
-                f"gpac -i {nhml_name.absolute()} nhmlr -o {song_name.absolute()}",
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=if_shell()
+            print(f"[DEBUG encapsulate] gpac nhmlr command...")
+            gpac_result = subprocess.run(
+                f'{gpac_cmd} -i {nhml_name.absolute()} nhmlr -o {song_name.absolute()}',
+                capture_output=True, shell=if_shell()
             )
+            print(f"[DEBUG encapsulate] gpac return code: {gpac_result.returncode}")
+            if gpac_result.stderr:
+                print(f"[DEBUG encapsulate] gpac stderr: {gpac_result.stderr.decode('utf-8', errors='ignore')[:500]}")
+            if not song_name.exists():
+                print(f"[DEBUG encapsulate] ERROR: gpac output file not created!")
+            else:
+                print(f"[DEBUG encapsulate] gpac output size: {song_name.stat().st_size} bytes")
 
             alac_params_atom_name = Path(tmp_dir.name) / Path(f"{name}.atom")
+            print(f"[DEBUG encapsulate] decoderParams length: {len(song_info.decoderParams)} bytes")
+            print(f"[DEBUG encapsulate] decoderParams hex (first 48): {song_info.decoderParams[:48].hex()}")
             with open(alac_params_atom_name.absolute(), "wb") as f:
                 f.write(song_info.decoderParams)
 
             final_m4a_name = Path(tmp_dir.name) / Path(f"{name}_final.m4a")
-            subprocess.run(
-                f"mp4edit --insert moov/trak/mdia/minf/stbl/stsd/alac:{alac_params_atom_name.absolute()} "
-                f"{song_name.absolute()} {final_m4a_name.absolute()}",
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=if_shell()
+            mp4edit_cmd_str = (
+                f'{mp4edit_cmd} --insert moov/trak/mdia/minf/stbl/stsd/alac:{alac_params_atom_name.absolute()} '
+                f'{song_name.absolute()} {final_m4a_name.absolute()}'
             )
+            print(f"[DEBUG mp4edit] Command: {mp4edit_cmd_str}")
+            print(f"[DEBUG mp4edit] shell={if_shell()}")
+            result = subprocess.run(
+                mp4edit_cmd_str,
+                capture_output=True, shell=if_shell()
+            )
+            print(f"[DEBUG mp4edit] Return code: {result.returncode}")
+            if result.stdout:
+                print(f"[DEBUG mp4edit] stdout: {result.stdout.decode('utf-8', errors='ignore')}")
+            if result.stderr:
+                print(f"[DEBUG mp4edit] stderr: {result.stderr.decode('utf-8', errors='ignore')}")
+            if not final_m4a_name.exists():
+                print(f"[DEBUG mp4edit] ERROR: Output file not created!")
             song_name = final_m4a_name
 
         case Codec.EC3 | Codec.AC3:
@@ -303,7 +383,7 @@ def encapsulate(song_info: SongInfo, decrypted_media: bytes, atmos_convert: bool
                     f.write(decrypted_media)
             else:
                 subprocess.run(
-                    f"gpac -i {media.absolute()} -o {song_name.absolute()}",
+                    f'{gpac_cmd} -i {media.absolute()} -o {song_name.absolute()}',
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=if_shell()
                 )
 
@@ -324,14 +404,25 @@ def encapsulate(song_info: SongInfo, decrypted_media: bytes, atmos_convert: bool
                 f.write(str(nhml_xml))
 
             subprocess.run(
-                f"gpac -i {nhml_name.absolute()} nhmlr -o {song_name.absolute()}",
+                f'{gpac_cmd} -i {nhml_name.absolute()} nhmlr -o {song_name.absolute()}',
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=if_shell()
             )
+
+    # Find MP4Box tool
+    mp4box_cmd = "MP4Box"
+    mp4box_paths = [
+        Path(r"C:\Program Files\GPAC\mp4box.exe"),
+        Path(__file__).parent.parent / "binaries" / "gpac" / "mp4box.exe",
+    ]
+    for mp4box_path in mp4box_paths:
+        if mp4box_path.exists():
+            mp4box_cmd = f'"{mp4box_path}"'
+            break
 
     # Set M4A brand
     if not if_raw_atmos(song_info.codec, atmos_convert):
         subprocess.run(
-            f'MP4Box -brand "M4A " -ab "M4A " -ab "mp42" {song_name.absolute()}',
+            f'{mp4box_cmd} -brand "M4A " -ab "M4A " -ab "mp42" {song_name.absolute()}',
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=if_shell()
         )
 
@@ -418,11 +509,32 @@ def fix_encapsulate(song: bytes) -> bytes:
     with open(song_name.absolute(), "wb") as f:
         f.write(song)
 
-    subprocess.run(
+    print(f"[DEBUG fix_encapsulate] Input file size: {len(song)} bytes")
+
+    ffmpeg_cmd = (
         f"ffmpeg -y -i {song_name.absolute()} -fflags +bitexact -map_metadata 0 "
-        f"-c:a copy -c:v copy {new_song_name.absolute()}",
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=if_shell()
+        f"-c:a copy -c:v copy {new_song_name.absolute()}"
     )
+    print(f"[DEBUG fix_encapsulate] FFmpeg command: {ffmpeg_cmd}")
+
+    result = subprocess.run(
+        ffmpeg_cmd,
+        capture_output=True, shell=if_shell()
+    )
+    print(f"[DEBUG fix_encapsulate] FFmpeg return code: {result.returncode}")
+    if result.stderr:
+        stderr_text = result.stderr.decode('utf-8', errors='ignore')
+        # Check for ALAC related errors
+        if 'alac' in stderr_text.lower() or 'invalid' in stderr_text.lower():
+            print(f"[DEBUG fix_encapsulate] FFmpeg stderr (ALAC related): {stderr_text[:1000]}")
+
+    if not new_song_name.exists():
+        print(f"[DEBUG fix_encapsulate] ERROR: Output file not created!")
+        # Return original if FFmpeg failed
+        tmp_dir.cleanup()
+        return song
+
+    print(f"[DEBUG fix_encapsulate] Output file size: {new_song_name.stat().st_size} bytes")
 
     with open(new_song_name.absolute(), "rb") as f:
         encapsulated_song = f.read()
@@ -457,15 +569,31 @@ def fix_esds_box(raw_song: bytes, song: bytes) -> bytes:
     with open(song_name.absolute(), "wb") as f:
         f.write(song)
 
+    # Find mp4extract and mp4edit (Bento4 tools)
+    mp4extract_cmd = "mp4extract"
+    mp4edit_cmd = "mp4edit"
+    bento4_bin_paths = [
+        Path(__file__).parent.parent / "binaries" / "bento4" / "Bento4-SDK-1-6-0-641.x86_64-microsoft-win32" / "bin",
+        Path(r"C:\Program Files\Bento4"),
+        Path(r"C:\Bento4\bin"),
+    ]
+    for bento4_bin in bento4_bin_paths:
+        mp4extract_path = bento4_bin / "mp4extract.exe"
+        mp4edit_path = bento4_bin / "mp4edit.exe"
+        if mp4extract_path.exists():
+            mp4extract_cmd = f'"{mp4extract_path}"'
+            mp4edit_cmd = f'"{mp4edit_path}"'
+            break
+
     # Extract original ESDS box
     subprocess.run(
-        f"mp4extract moov/trak/mdia/minf/stbl/stsd/enca[0]/esds {raw_song_name.absolute()} {esds_name.absolute()}",
+        f"{mp4extract_cmd} moov/trak/mdia/minf/stbl/stsd/enca[0]/esds {raw_song_name.absolute()} {esds_name.absolute()}",
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=if_shell()
     )
 
     # Replace ESDS box in processed file
     subprocess.run(
-        f"mp4edit --replace moov/trak/mdia/minf/stbl/stsd/mp4a/esds:{esds_name.absolute()} "
+        f"{mp4edit_cmd} --replace moov/trak/mdia/minf/stbl/stsd/mp4a/esds:{esds_name.absolute()} "
         f"{song_name.absolute()} {final_song_name.absolute()}",
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=if_shell()
     )

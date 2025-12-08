@@ -61,8 +61,6 @@ from .api import WebAPI
 from .config import (
     PluginConfig,
     WrapperConfig,
-    QemuConfig,
-    DockerConfig,
     QueueConfig,
     RegionConfig,
     DownloadConfig,
@@ -158,8 +156,6 @@ __all__ = [
     # Config
     "PluginConfig",
     "WrapperConfig",
-    "QemuConfig",
-    "DockerConfig",
     "QueueConfig",
     "RegionConfig",
     "DownloadConfig",

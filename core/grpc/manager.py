@@ -265,32 +265,44 @@ class WrapperManager:
             on_success: Callback for successful decryption
             on_failure: Callback for failed decryption
         """
-        stream = self._stub.Decrypt(self._decrypt_request_generator())
-        self._safely_create_task(self._decrypt_keepalive())
+        # Create stream handler task
+        async def handle_stream():
+            try:
+                stream = self._stub.Decrypt(self._decrypt_request_generator())
+                # Start keepalive task
+                self._safely_create_task(self._decrypt_keepalive())
 
-        async for reply in stream:
-            reply: DecryptReply
-            if reply.data.adam_id == "KEEPALIVE":
-                continue
-            match reply.header.code:
-                case -1:
-                    self._safely_create_task(
-                        on_failure(
-                            reply.data.adam_id,
-                            reply.data.key,
-                            reply.data.sample,
-                            reply.data.sample_index,
-                        )
-                    )
-                case 0:
-                    self._safely_create_task(
-                        on_success(
-                            reply.data.adam_id,
-                            reply.data.key,
-                            reply.data.sample,
-                            reply.data.sample_index,
-                        )
-                    )
+                async for reply in stream:
+                    reply: DecryptReply
+                    if reply.data.adam_id == "KEEPALIVE":
+                        continue
+                    match reply.header.code:
+                        case -1:
+                            self._safely_create_task(
+                                on_failure(
+                                    reply.data.adam_id,
+                                    reply.data.key,
+                                    reply.data.sample,
+                                    reply.data.sample_index,
+                                )
+                            )
+                        case 0:
+                            self._safely_create_task(
+                                on_success(
+                                    reply.data.adam_id,
+                                    reply.data.key,
+                                    reply.data.sample,
+                                    reply.data.sample_index,
+                                )
+                            )
+            except grpc.aio.AioRpcError as e:
+                logger.error(f"[Decrypt] Stream error: {e}")
+            except Exception as e:
+                logger.error(f"[Decrypt] Unexpected error: {e}", exc_info=True)
+
+        # Start stream handler in background
+        self._safely_create_task(handle_stream())
+        logger.info("[Decrypt] Stream initialized")
 
     async def _decrypt_keepalive(self):
         """Send periodic keepalive messages to maintain the decrypt stream."""

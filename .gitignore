@@ -216,3 +216,5 @@ test_downloads/
 tests/test_downloads/
 
 ref-code/
+logs/
+binaries/rootfs/data/data/com.apple.android.music/files

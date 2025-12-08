@@ -133,14 +133,13 @@ class ServiceCommandsHandler:
 • 仅支持单曲链接 (带 ?i= 参数或 /song/ 路径)
 
 * Wrapper 连接模式:
-• docker - Docker 容器模式（推荐，支持多账户和运行时登录）
-• qemu - QEMU 本地实例模式（需要手动配置）
+• native - 原生 Python 模式（推荐，快速启动，支持多账户和运行时登录）
 • remote - 远程服务模式（连接远程 wrapper-manager）
 
 *  新特性:
 • 支持运行时添加账户（无需重启服务）
 • 支持双因素身份验证 (2FA)
 • 多账户管理，自动区域检测
-• 原生 Python 实现，无需 Go 下载器"""
+• 完全 Python 原生实现，无需外部依赖"""
 
         yield event.plain_result(help_text)

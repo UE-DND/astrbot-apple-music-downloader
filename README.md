@@ -2,10 +2,6 @@
 
 > ⚠️ 为避免服务器过载和封号风险，本插件仅允许下载单曲，不支持专辑、播放列表等批量下载功能。
 
-## 📋 要求
-
-- Docker（推荐）或远程 Wrapper-Manager 服务
-
 ## 安装
 
 ```bash
@@ -70,9 +66,16 @@ git clone https://gh-proxy.com/https://github.com/UE-DND/astrbot_apple_music_dow
 | `atmos` | 杜比全景声 |
 | `aac-he` | Binaural |
 
-## ⚙️ 使用公共实例
+## ⚙️ 模式配置
 
-如果没有 Docker 环境，可使用公共 Wrapper-Manager 实例：
+### Native 模式（推荐，默认）
+
+1. 默认配置即可使用，无需修改
+2. 或在 WebUI 中设置 `wrapper_mode` 为 `native`
+
+### Remote 模式（公共实例）
+
+使用公共 Wrapper-Manager 实例：
 
 1. 在 AstrBot WebUI 中修改配置：
    - `wrapper_mode`
@@ -93,7 +96,7 @@ secure = true
 
 ## ⚠️ 注意
 
-- 本地部署需要有效的 Apple Music 订阅
+- Native 模式需要有效的 Apple Music 订阅
 - 部分曲目可能因地区限制不可用
 - 此项目仅供技术交流，下载文件默认 24 小时后自动删除
 

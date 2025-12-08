@@ -13,28 +13,9 @@ from typing import Optional
 @dataclass
 class WrapperConfig:
     """Wrapper service configuration."""
-    mode: str = "docker"  # docker, remote, qemu
+    mode: str = "native"  # native, remote
     url: str = "127.0.0.1:18923"
     secure: bool = False
-
-
-@dataclass
-class QemuConfig:
-    """QEMU local instance configuration."""
-    enable_hw_accel: bool = False
-    hw_accelerator: str = ""
-    memory_size: str = "512M"
-    cpu_model: str = "Cascadelake-Server-v5"
-    show_window: bool = False
-
-
-@dataclass
-class DockerConfig:
-    """Docker container configuration."""
-    docker_host: str = ""
-    container_name: str = "apple-music-wrapper-manager"
-    image_name: str = "apple-music-wrapper-manager"
-    grpc_port: int = 18923
 
 
 @dataclass
@@ -112,8 +93,6 @@ class PluginConfig:
     methods to load from AstrBot's plugin config dict.
     """
     wrapper: WrapperConfig = field(default_factory=WrapperConfig)
-    qemu: QemuConfig = field(default_factory=QemuConfig)
-    docker: DockerConfig = field(default_factory=DockerConfig)
     queue: QueueConfig = field(default_factory=QueueConfig)
     region: RegionConfig = field(default_factory=RegionConfig)
     download: DownloadConfig = field(default_factory=DownloadConfig)
@@ -142,28 +121,9 @@ class PluginConfig:
 
         # Wrapper configuration
         instance.wrapper = WrapperConfig(
-            mode=config.get("wrapper_mode", "docker"),
+            mode=config.get("wrapper_mode", "native"),
             url=config.get("wrapper_url", "127.0.0.1:18923"),
             secure=config.get("wrapper_secure", False),
-        )
-
-        # QEMU configuration
-        qemu_cfg = config.get("qemu_config", {})
-        instance.qemu = QemuConfig(
-            enable_hw_accel=qemu_cfg.get("enable_hw_accel", False),
-            hw_accelerator=qemu_cfg.get("hw_accelerator", ""),
-            memory_size=qemu_cfg.get("memory_size", "512M"),
-            cpu_model=qemu_cfg.get("cpu_model", "Cascadelake-Server-v5"),
-            show_window=qemu_cfg.get("show_window", False),
-        )
-
-        # Docker configuration
-        docker_cfg = config.get("docker_config", {})
-        instance.docker = DockerConfig(
-            docker_host=docker_cfg.get("docker_host", ""),
-            container_name=docker_cfg.get("container_name", "apple-music-wrapper-manager"),
-            image_name=docker_cfg.get("image_name", "apple-music-wrapper-manager"),
-            grpc_port=docker_cfg.get("grpc_port", 18923),
         )
 
         # Queue configuration

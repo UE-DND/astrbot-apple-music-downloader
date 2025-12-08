@@ -1,8 +1,5 @@
 """
 Apple Music Downloader - AstrBot 插件
-
-
-原生 Python 实现，直接使用 gRPC 连接 wrapper-manager 服务。
 """
 
 from pathlib import Path
@@ -39,8 +36,8 @@ class AppleMusicDownloader(Star):
     """
     Apple Music Downloader 插件
 
-    基于 AppleMusicDecrypt  重写，使用原生 Python + gRPC 直接连接 wrapper-manager。
-    支持三种 wrapper 连接模式：Docker、QEMU 本地实例、远程服务。
+    基于 AppleMusicDecrypt 重写，使用原生 Python + gRPC 直接连接 wrapper-manager。
+    支持两种 wrapper 连接模式：Native（原生 Python）、远程服务。
     """
 
     def __init__(self, context: Context, config: AstrBotConfig):

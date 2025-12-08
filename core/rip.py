@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Callable, Any, Dict
 
-from .types import Codec, M3U8Info, SongInfo
+from .types import Codec, M3U8Info, SongInfo, PREFETCH_KEY
 from .metadata import SongMetadata
 from .mp4 import (
     extract_media, extract_song, encapsulate,
@@ -185,7 +185,7 @@ class DecryptionManager:
         if adam_id in self._tasks:
             task = self._tasks[adam_id]
             task.on_sample_decrypted(sample_index, sample)
-            logger.info(f"[{adam_id}] Decrypted sample {sample_index + 1}/{len(task.decrypted_samples)}")
+            logger.debug(f"[{adam_id}] Decrypted sample {sample_index + 1}/{len(task.decrypted_samples)}")
         else:
             logger.warning(f"[DecryptionManager] Received decrypt success for unknown task: {adam_id}")
 
@@ -231,7 +231,12 @@ class DecryptionManager:
             logger.info(f"[{task.adam_id}] Queuing {total_samples} samples for decryption...")
 
             for sample_index, sample in enumerate(task.song_info.samples):
-                key = task.m3u8_info.keys[sample.descIndex]
+                key, is_prefetch = resolve_decrypt_key(task.m3u8_info.keys, sample.descIndex)
+                if not key:
+                    logger.error(f"[{task.adam_id}] No decrypt key resolved for descIndex={sample.descIndex}")
+                    task.on_decrypt_failed(f"无可用解密密钥 (descIndex={sample.descIndex})")
+                    return False
+
                 logger.debug(f"[{task.adam_id}] Queuing sample {sample_index + 1}/{total_samples}, descIndex={sample.descIndex}, data_size={len(sample.data) if sample.data else 0}")
                 try:
                     await self.wrapper_manager.decrypt(
@@ -285,6 +290,25 @@ def get_decryption_manager(wrapper_manager: Any) -> DecryptionManager:
     return _decryption_managers[manager_id]
 
 
+def resolve_decrypt_key(keys: list[str], desc_index: int) -> tuple[Optional[str], bool]:
+    """
+    Resolve decrypt key for samples. For ALAC streams, all samples share the same SKD key.
+
+    Returns:
+        Tuple of (key, is_prefetch_placeholder)
+    """
+    if not keys:
+        return None, False
+
+    # Fallback to the first real SKD key; descIndex is ignored for key selection.
+    real_key = next((k for k in keys if k != PREFETCH_KEY), None)
+    if real_key:
+        return real_key, False
+
+    # If only PREFETCH exists, return placeholder to signal failure upstream.
+    return keys[0], True
+
+
 async def rip_song(
     song_id: str,
     storefront: str,
@@ -294,7 +318,8 @@ async def rip_song(
     wrapper_manager: Any,
     progress_callback: Optional[Callable[[DownloadStatus, str], None]] = None,
     check_existence: bool = True,
-    plugin_config: Any = None
+    plugin_config: Any = None,
+    wrapper_service: Any = None  # Optional: WrapperService for fast decrypt
 ) -> DownloadResult:
     """
     Download a single song.
@@ -505,21 +530,89 @@ async def rip_song(
         task.init_decrypted_samples()
         logger.debug(f"[{song_id}] Step 6c: Initialized decrypted_samples array")
 
-        # Use DecryptionManager for async decryption
-        logger.info(f"[{song_id}] Step 6d: Getting DecryptionManager...")
-        decrypt_manager = get_decryption_manager(wrapper_manager)
-        logger.info(f"[{song_id}] Step 6e: Calling decrypt_manager.decrypt_song...")
-        decrypt_success = await decrypt_manager.decrypt_song(task, timeout=300.0)
-        logger.info(f"[{song_id}] Step 6e: decrypt_song returned: success={decrypt_success}")
+        # DEBUG: Analyze descIndex distribution across all samples
+        from collections import Counter
+
+        desc_index_counts = Counter(sample.descIndex for sample in task.song_info.samples)
+        logger.info(f"[{song_id}] Step 6c-debug: descIndex distribution: {dict(desc_index_counts)}")
+        logger.info(f"[{song_id}] Step 6c-debug: Available keys count: {len(task.m3u8_info.keys)}")
+        for i, k in enumerate(task.m3u8_info.keys):
+            key_preview = k[:60] if k else "None"
+            is_prefetch = "PREFETCH" if k == PREFETCH_KEY else "SKD"
+            logger.info(f"[{song_id}] Step 6c-debug: keys[{i}] = {is_prefetch}: {key_preview}...")
+
+        decrypt_success = False
+
+        # Use fast decrypt_all if wrapper_service is available (Native mode)
+        enable_fast_decrypt = False  # 临时关闭 fast decrypt_all，使用稳定的流式解密
+        if enable_fast_decrypt and wrapper_service and hasattr(wrapper_service, 'decrypt_all'):
+            logger.info(f"[{song_id}] Step 6d: Using FAST decrypt_all with per-key grouping...")
+
+            total_samples = len(task.song_info.samples)
+            task.decrypted_samples = [None] * total_samples
+
+            from collections import Counter, defaultdict
+
+            grouped_samples = defaultdict(list)
+            decrypt_counter = 0
+            fast_error: Optional[str] = None
+
+            # 分组：同一密钥走同一个 decrypt_all
+            for idx, sample in enumerate(task.song_info.samples):
+                key, is_prefetch = resolve_decrypt_key(task.m3u8_info.keys, sample.descIndex)
+                if not key:
+                    fast_error = f"descIndex={sample.descIndex} 无可用解密密钥"
+                    logger.error(f"[{song_id}] Step 6d: {fast_error}")
+                    break
+
+                grouped_samples[key].append((sample.data, idx))
+
+            # 统计各 descIndex 对应的样本数，便于排查
+            desc_index_counts = Counter(sample.descIndex for sample in task.song_info.samples)
+            logger.info(f"[{song_id}] Step 6d-debug: descIndex distribution: {dict(desc_index_counts)}")
+            logger.info(f"[{song_id}] Step 6d-debug: Key groups: {len(grouped_samples)}")
+
+            if fast_error is None:
+                decrypt_success = True
+                for key, samples_for_key in grouped_samples.items():
+                    decrypt_success, decrypted_list, error_msg = await wrapper_service.decrypt_all(
+                        song_id, key, samples_for_key, None
+                    )
+
+                    if not decrypt_success or not decrypted_list or len(decrypted_list) != len(samples_for_key):
+                        fast_error = error_msg or "解密失败"
+                        decrypt_success = False
+                        logger.error(f"[{song_id}] Step 6d: Fast decrypt failed for key={key}: {fast_error}")
+                        break
+
+                    for decrypted_sample, (_, original_index) in zip(decrypted_list, samples_for_key):
+                        task.decrypted_samples[original_index] = decrypted_sample
+
+                    decrypt_counter += len(samples_for_key)
+
+                task.decrypted_count = decrypt_counter
+                decrypt_success = decrypt_success and None not in task.decrypted_samples
+
+            if not decrypt_success:
+                logger.warning(f"[{song_id}] Fast decrypt_all unavailable or failed, fallback to stream decrypt. Reason: {fast_error or 'unknown'}")
 
         if not decrypt_success:
-            error_msg = task.decrypt_error or "解密失败"
-            logger.error(f"[{song_id}] Step 6: Decryption failed: {error_msg}")
-            return DownloadResult(
-                success=False,
-                status=DownloadStatus.FAILED,
-                message=error_msg
-            )
+            # Fallback to slow DecryptionManager for remote mode或 fast 失败
+            logger.info(f"[{song_id}] Step 6d: Using slow DecryptionManager (gRPC stream)...")
+            decrypt_manager = get_decryption_manager(wrapper_manager)
+            logger.info(f"[{song_id}] Step 6e: Calling decrypt_manager.decrypt_song...")
+            task.init_decrypted_samples()
+            decrypt_success = await decrypt_manager.decrypt_song(task, timeout=300.0)
+            logger.info(f"[{song_id}] Step 6e: decrypt_song returned: success={decrypt_success}")
+
+            if not decrypt_success:
+                error_msg = task.decrypt_error or "解密失败"
+                logger.error(f"[{song_id}] Step 6: Decryption failed: {error_msg}")
+                return DownloadResult(
+                    success=False,
+                    status=DownloadStatus.FAILED,
+                    message=error_msg
+                )
 
         # Step 7: Process and encapsulate
         update_status(DownloadStatus.PROCESSING, "处理中...")
@@ -538,20 +631,26 @@ async def rip_song(
         logger.info(f"[{song_id}] Step 7c: Post-processing (is_raw_atmos={is_raw_atmos}, actual_codec={actual_codec})")
 
         if not is_raw_atmos:
-            if actual_codec not in [Codec.EC3, Codec.AC3]:
+            # Skip fix_encapsulate for ALAC - FFmpeg removes the ALAC config atom
+            # causing "invalid samples per frame" errors
+            if actual_codec not in [Codec.EC3, Codec.AC3, Codec.ALAC]:
                 logger.debug(f"[{song_id}] Step 7c: Fixing encapsulation...")
                 song = await run_sync(fix_encapsulate, song)
+            else:
+                logger.debug(f"[{song_id}] Step 7c: Skipping fix_encapsulate for codec={actual_codec}")
 
-            logger.debug(f"[{song_id}] Step 7d: Writing metadata...")
-            song = await run_sync(
-                write_metadata,
-                song,
-                task.metadata,
-                config.embed_metadata,
-                config.cover_format,
-                task.song_info.params
-            )
-            logger.info(f"[{song_id}] Step 7d: Metadata written")
+            # 对 ALAC 暂时跳过写入 metadata，避免额外封装修改导致帧信息损坏
+            if actual_codec != Codec.ALAC:
+                logger.debug(f"[{song_id}] Step 7d: Writing metadata...")
+                song = await run_sync(
+                    write_metadata,
+                    song,
+                    task.metadata,
+                    config.embed_metadata,
+                    config.cover_format,
+                    task.song_info.params
+                )
+                logger.info(f"[{song_id}] Step 7d: Metadata written")
 
             # Fix ESDS box for AAC codecs
             if actual_codec in [Codec.AAC, Codec.AAC_DOWNMIX, Codec.AAC_BINAURAL]:

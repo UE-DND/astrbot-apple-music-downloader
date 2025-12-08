@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Callable, Awaitable, Dict, List, Any, TYPE_CHECKING
 
-from astrbot.api import logger
+from .logger import LoggerInterface, get_logger
 
 if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent
@@ -153,6 +153,7 @@ class DownloadQueue:
         max_queue_size: int = 20,
         task_timeout: int = 600,
         queue_timeout: int = 300,
+        logger: Optional[LoggerInterface] = None
     ):
         """
         初始化队列管理器
@@ -161,10 +162,12 @@ class DownloadQueue:
             max_queue_size: 最大队列长度
             task_timeout: 单个任务超时时间（秒）
             queue_timeout: 队列等待超时时间（秒）
+            logger: Logger instance (auto-detect if None)
         """
         self._max_queue_size = max_queue_size
         self._task_timeout = task_timeout
         self._queue_timeout = queue_timeout
+        self.logger = logger or get_logger()
 
         # 队列存储
         self._pending_queue: deque[DownloadTask] = deque()
@@ -305,7 +308,7 @@ class DownloadQueue:
             self._sort_queue()
 
             position = self.get_position(task.task_id)
-            logger.info(
+            self.logger.info(
                 f"[Queue] 任务入队: {task.task_id}, 位置: {position}, 用户: {user_name}"
             )
 
@@ -376,7 +379,7 @@ class DownloadQueue:
                 # 通知队列中其他任务位置变化
                 await self._notify_position_changes()
 
-                logger.info(f"[Queue] 任务已取消: {task_id}")
+                self.logger.info(f"[Queue] 任务已取消: {task_id}")
                 return True, f"任务 {task_id} 已取消"
 
             return False, "取消失败"
@@ -400,12 +403,12 @@ class DownloadQueue:
     async def start_processor(self) -> None:
         """启动队列处理器"""
         if self._processing:
-            logger.warning("[Queue] 处理器已在运行")
+            self.logger.warning("[Queue] 处理器已在运行")
             return
 
         self._processing = True
         self._processor_task = asyncio.create_task(self._process_loop())
-        logger.info("[Queue] 队列处理器已启动")
+        self.logger.info("[Queue] 队列处理器已启动")
 
     async def stop_processor(self) -> None:
         """停止队列处理器"""
@@ -416,7 +419,7 @@ class DownloadQueue:
                 await self._processor_task
             except asyncio.CancelledError:
                 pass
-        logger.info("[Queue] 队列处理器已停止")
+        self.logger.info("[Queue] 队列处理器已停止")
 
     async def _process_loop(self) -> None:
         """队列处理循环"""
@@ -432,10 +435,10 @@ class DownloadQueue:
                 await self._process_task(task)
 
             except asyncio.CancelledError:
-                logger.info("[Queue] 处理循环被取消")
+                self.logger.info("[Queue] 处理循环被取消")
                 break
             except Exception as e:
-                logger.error(f"[Queue] 处理循环异常: {e}")
+                self.logger.error(f"[Queue] 处理循环异常: {e}")
                 await asyncio.sleep(1)
 
     async def _get_next_task(self) -> Optional[DownloadTask]:
@@ -459,7 +462,7 @@ class DownloadQueue:
                     if self._on_task_failed:
                         await self._on_task_failed(task)
 
-                    logger.warning(f"[Queue] 任务等待超时: {task.task_id}")
+                    self.logger.warning(f"[Queue] 任务等待超时: {task.task_id}")
                     continue
 
                 # 取出任务
@@ -474,14 +477,14 @@ class DownloadQueue:
         task.started_at = time.time()
         self._current_task = task
 
-        logger.info(f"[Queue] 开始处理任务: {task.task_id}, 用户: {task.user_name}")
+        self.logger.info(f"[Queue] 开始处理任务: {task.task_id}, 用户: {task.user_name}")
 
         # 通知任务开始
         if self._on_task_start:
             try:
                 await self._on_task_start(task)
             except Exception as e:
-                logger.warning(f"[Queue] 任务开始回调异常: {e}")
+                self.logger.warning(f"[Queue] 任务开始回调异常: {e}")
 
         # 通知其他任务位置变化
         await self._notify_position_changes()
@@ -502,7 +505,7 @@ class DownloadQueue:
                 self._total_wait_time += task.wait_time
                 self._total_process_time += task.process_time
 
-                logger.info(
+                self.logger.info(
                     f"[Queue] 任务完成: {task.task_id}, 耗时: {task.process_time:.1f}s"
                 )
 
@@ -523,7 +526,7 @@ class DownloadQueue:
             task.completed_at = time.time()
             self._total_failed += 1
 
-            logger.error(f"[Queue] 任务超时: {task.task_id}")
+            self.logger.error(f"[Queue] 任务超时: {task.task_id}")
 
             if self._on_task_failed:
                 await self._on_task_failed(task)
@@ -536,7 +539,7 @@ class DownloadQueue:
             task.error = "任务被取消"
             task.completed_at = time.time()
 
-            logger.info(f"[Queue] 任务被取消: {task.task_id}")
+            self.logger.info(f"[Queue] 任务被取消: {task.task_id}")
 
             if task._future and not task._future.done():
                 task._future.cancel()
@@ -547,7 +550,7 @@ class DownloadQueue:
             task.completed_at = time.time()
             self._total_failed += 1
 
-            logger.error(f"[Queue] 任务失败: {task.task_id}, 错误: {e}")
+            self.logger.error(f"[Queue] 任务失败: {task.task_id}, 错误: {e}")
 
             if self._on_task_failed:
                 await self._on_task_failed(task)
@@ -573,7 +576,7 @@ class DownloadQueue:
             try:
                 await self._on_queue_position_changed(task)
             except Exception as e:
-                logger.warning(f"[Queue] 位置变化通知失败: {e}")
+                self.logger.warning(f"[Queue] 位置变化通知失败: {e}")
 
     # ==================== 等待任务完成 ====================
 
@@ -690,7 +693,7 @@ class DownloadQueue:
                     task._future.cancel()
 
             self._pending_queue.clear()
-            logger.info(f"[Queue] 队列已清空，取消 {count} 个任务")
+            self.logger.info(f"[Queue] 队列已清空，取消 {count} 个任务")
 
             return count
 
@@ -719,6 +722,6 @@ class DownloadQueue:
                 del self._tasks_by_user[user_id]
 
         if cleaned > 0:
-            logger.debug(f"[Queue] 清理 {cleaned} 个历史任务索引")
+            self.logger.debug(f"[Queue] 清理 {cleaned} 个历史任务索引")
 
         return cleaned

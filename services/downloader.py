@@ -14,31 +14,54 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 
-from astrbot.api import logger
+from .logger import LoggerInterface, get_logger
 
 # Add debug logs for download process
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
-from ..core import (
-    WebAPI,
-    AppleMusicURL,
-    Song,
-    Album,
-    Playlist,
-    Artist,
-    URLType,
-    PluginConfig,
-    SongMetadata,
-    Codec,
-    rip_song,
-    get_song_info,
-    DownloadStatus,
-    DownloadResult as CoreDownloadResult,
-    RipDownloadConfig,
-    save_all,
-    get_output_path,
-)
+# 尝试相对导入,失败则使用绝对导入(支持独立运行)
+try:
+    from ..core import (
+        WebAPI,
+        AppleMusicURL,
+        Song,
+        Album,
+        Playlist,
+        Artist,
+        URLType,
+        PluginConfig,
+        SongMetadata,
+        Codec,
+        rip_song,
+        get_song_info,
+        DownloadStatus,
+        DownloadResult as CoreDownloadResult,
+        RipDownloadConfig,
+        save_all,
+        get_output_path,
+    )
+except ImportError:
+    # 独立运行模式
+    from core import (
+        WebAPI,
+        AppleMusicURL,
+        Song,
+        Album,
+        Playlist,
+        Artist,
+        URLType,
+        PluginConfig,
+        SongMetadata,
+        Codec,
+        rip_song,
+        get_song_info,
+        DownloadStatus,
+        DownloadResult as CoreDownloadResult,
+        RipDownloadConfig,
+        save_all,
+        get_output_path,
+    )
 from .wrapper_service import WrapperService
 
 
@@ -154,7 +177,7 @@ class MetadataFetcher:
             if info:
                 return f"{info['title']} - {info['artist']}"
         except Exception as e:
-            logger.warning(f"Failed to fetch song info: {e}")
+            self.logger.warning(f"Failed to fetch song info: {e}")
 
         return None
 
@@ -170,7 +193,8 @@ class DownloaderService:
         self,
         config: PluginConfig,
         wrapper_service: WrapperService,
-        api_client: Optional[WebAPI] = None
+        api_client: Optional[WebAPI] = None,
+        logger: Optional[LoggerInterface] = None
     ):
         """
         Initialize the downloader service.
@@ -179,11 +203,13 @@ class DownloaderService:
             config: Plugin configuration
             wrapper_service: Wrapper service instance
             api_client: Optional WebAPI instance (created if not provided)
+            logger: Logger instance (auto-detect if None)
         """
         self.config = config
         self.wrapper_service = wrapper_service
         self._api: Optional[WebAPI] = api_client
         self._metadata_fetcher: Optional[MetadataFetcher] = None
+        self.logger = logger or get_logger()
 
         # Download cache
         self._cache: Dict[str, DownloadResult] = {}
@@ -214,7 +240,7 @@ class DownloaderService:
             return True, "服务初始化成功"
 
         except Exception as e:
-            logger.error(f"Failed to initialize downloader service: {e}")
+            self.logger.error(f"Failed to initialize downloader service: {e}")
             return False, f"初始化失败: {str(e)}"
 
     async def close(self):
@@ -273,7 +299,7 @@ class DownloaderService:
         if not force and cache_key in self._cache:
             cached = self._cache[cache_key]
             if cached.success and all(Path(p).exists() for p in cached.file_paths):
-                logger.info(f"Using cached download result for {url}")
+                self.logger.info(f"Using cached download result for {url}")
                 return cached
 
         # Currently only support single song
@@ -314,7 +340,7 @@ class DownloaderService:
 
         try:
             # Execute download
-            logger.info(f"[Download] Starting rip_song for song_id={parsed['id']}, storefront={parsed['storefront'] or self.config.region.storefront}")
+            self.logger.info(f"[Download] Starting rip_song for song_id={parsed['id']}, storefront={parsed['storefront'] or self.config.region.storefront}")
             result = await rip_song(
                 song_id=parsed["id"],
                 storefront=parsed["storefront"] or self.config.region.storefront,
@@ -324,10 +350,11 @@ class DownloaderService:
                 wrapper_manager=manager,
                 progress_callback=progress_callback,
                 check_existence=not force,
-                plugin_config=self.config
+                plugin_config=self.config,
+                wrapper_service=self.wrapper_service  # Pass for fast decrypt_all
             )
 
-            logger.info(f"[Download] rip_song completed: success={result.success}, status={result.status}, message={result.message}")
+            self.logger.info(f"[Download] rip_song completed: success={result.success}, status={result.status}, message={result.message}")
 
             if not result.success:
                 return DownloadResult(
@@ -387,7 +414,7 @@ class DownloaderService:
             )
 
         except Exception as e:
-            logger.exception(f"Download failed: {e}")
+            self.logger.exception(f"Download failed: {e}")
             return DownloadResult(
                 success=False,
                 message="下载失败",
@@ -420,7 +447,7 @@ class DownloaderService:
             )
             return info
         except Exception as e:
-            logger.warning(f"Failed to get song metadata: {e}")
+            self.logger.warning(f"Failed to get song metadata: {e}")
             return None
 
     def get_download_dirs(self, quality: Optional[DownloadQuality] = None) -> List[Path]:
@@ -431,7 +458,7 @@ class DownloaderService:
     def clear_cache(self):
         """Clear download cache."""
         self._cache.clear()
-        logger.info("Download cache cleared")
+        self.logger.info("Download cache cleared")
 
 
 # Keep backward compatibility
