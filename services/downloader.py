@@ -1,8 +1,6 @@
 """
-Apple Music Downloader Service
-
-
-Provides high-level download service using native Python  core modules.
+Apple Music Downloader 服务。
+基于核心模块提供高层下载能力。
 """
 
 import asyncio
@@ -16,7 +14,6 @@ from typing import Optional, List, Dict, Any, Tuple
 
 from .logger import LoggerInterface, get_logger
 
-# Add debug logs for download process
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
@@ -66,14 +63,14 @@ from .wrapper_service import WrapperService
 
 
 class DownloadQuality(Enum):
-    """Download quality options."""
-    ALAC = "alac"                 # Lossless
-    EC3 = "ec3"                   # Dolby Atmos (EC3)
-    AC3 = "ac3"                   # Dolby Digital (AC3)
-    AAC = "aac"                   # High quality AAC
-    AAC_BINAURAL = "aac-binaural" # AAC binaural
-    AAC_DOWNMIX = "aac-downmix"   # AAC downmix
-    AAC_LEGACY = "aac-legacy"     # AAC legacy
+    """下载音质选项。"""
+    ALAC = "alac"                 # 无损
+    EC3 = "ec3"                   # Dolby Atmos（EC3）
+    AC3 = "ac3"                   # Dolby Digital（AC3）
+    AAC = "aac"                   # 高品质 AAC
+    AAC_BINAURAL = "aac-binaural" # AAC 双声道
+    AAC_DOWNMIX = "aac-downmix"   # AAC 混缩
+    AAC_LEGACY = "aac-legacy"     # AAC 旧版
 
 
 QUALITY_TO_CODEC = {
@@ -89,7 +86,7 @@ QUALITY_TO_CODEC = {
 
 @dataclass
 class DownloadResult:
-    """Download operation result."""
+    """下载结果。"""
     success: bool
     message: str
     file_paths: List[str] = field(default_factory=list)
@@ -102,7 +99,7 @@ class DownloadResult:
 
 @dataclass
 class ServiceStatus:
-    """Service status."""
+    """服务状态。"""
     wrapper_connected: bool = False
     wrapper_mode: str = ""
     wrapper_url: str = ""
@@ -112,19 +109,11 @@ class ServiceStatus:
 
 
 class URLParser:
-    """Apple Music URL parser"""
+    """用于 Apple Music 的链接解析器。"""
 
     @classmethod
     def parse(cls, url: str) -> Optional[Dict[str, str]]:
-        """
-        Parse an Apple Music URL.
-
-        Args:
-            url: Apple Music URL
-
-        Returns:
-            Dictionary with type, storefront, id, etc. or None
-        """
+        """解析 Apple Music URL。"""
         parsed = AppleMusicURL.parse_url(url.strip())
         if not parsed:
             return None
@@ -140,12 +129,12 @@ class URLParser:
 
     @classmethod
     def is_valid_url(cls, url: str) -> bool:
-        """Check if URL is valid."""
+        """检查 URL 是否有效。"""
         return AppleMusicURL.is_valid_url(url.strip())
 
     @classmethod
     def get_type_display(cls, url_type: str) -> str:
-        """Get display name for URL type."""
+        """获取 URL 类型显示名。"""
         type_names = {
             "song": "单曲",
             "album": "专辑",
@@ -156,7 +145,7 @@ class URLParser:
 
 
 class MetadataFetcher:
-    """Song metadata fetcher."""
+    """歌曲元数据获取器。"""
 
     def __init__(self, api_client: WebAPI):
         self.api = api_client
@@ -167,17 +156,7 @@ class MetadataFetcher:
         storefront: str = "cn",
         language: str = "zh-Hans-CN"
     ) -> Optional[str]:
-        """
-        Get song info string (title - artist).
-
-        Args:
-            song_id: Apple Music song ID
-            storefront: Region code
-            language: Language code
-
-        Returns:
-            Song info string or None
-        """
+        """获取歌曲信息文本（标题 - 艺术家）。"""
         try:
             info = await get_song_info(song_id, storefront, language, self.api)
             if info:
@@ -189,11 +168,7 @@ class MetadataFetcher:
 
 
 class DownloaderService:
-    """
-    Apple Music downloader service.
-
-    Provides high-level interface for downloading songs using  core modules.
-    """
+    """用于 Apple Music 的下载服务。"""
 
     def __init__(
         self,
@@ -202,34 +177,20 @@ class DownloaderService:
         api_client: Optional[WebAPI] = None,
         logger: Optional[LoggerInterface] = None
     ):
-        """
-        Initialize the downloader service.
-
-        Args:
-            config: Plugin configuration
-            wrapper_service: Wrapper service instance
-            api_client: Optional WebAPI instance (created if not provided)
-            logger: Logger instance (auto-detect if None)
-        """
+        """初始化下载服务。"""
         self.config = config
         self.wrapper_service = wrapper_service
         self._api: Optional[WebAPI] = api_client
         self._metadata_fetcher: Optional[MetadataFetcher] = None
         self.logger = logger or get_logger()
 
-        # Download cache
+        # 下载缓存
         self._cache: Dict[str, DownloadResult] = {}
-        self._cache_ttl = 7 * 24 * 3600  # 7 days
+        self._cache_ttl = 7 * 24 * 3600  # 7 天
 
     async def init(self) -> Tuple[bool, str]:
-        """
-        Initialize the downloader service.
-
-        Returns:
-            Tuple of (success, message)
-        """
+        """初始化下载服务并连接 Wrapper。"""
         try:
-            # Initialize API client
             if not self._api:
                 self._api = WebAPI(
                     parallel_num=1,
@@ -238,7 +199,6 @@ class DownloaderService:
 
             self._metadata_fetcher = MetadataFetcher(self._api)
 
-            # Initialize wrapper service
             success, msg = await self.wrapper_service.init()
             if not success:
                 return False, f"Wrapper 服务初始化失败: {msg}"
@@ -250,16 +210,15 @@ class DownloaderService:
             return False, f"初始化失败: {str(e)}"
 
     async def close(self):
-        """Close the downloader service."""
+        """关闭下载服务。"""
         if self._api:
             await self._api.close()
         await self.wrapper_service.close()
 
     async def get_status(self) -> ServiceStatus:
-        """Get service status."""
+        """获取服务状态。"""
         status = ServiceStatus()
 
-        # Wrapper status
         wrapper_status = await self.wrapper_service.get_status()
         status.wrapper_connected = wrapper_status.connected
         status.wrapper_mode = wrapper_status.mode.value
@@ -267,7 +226,6 @@ class DownloaderService:
         status.wrapper_regions = wrapper_status.regions
         status.error = wrapper_status.error
 
-        # API status
         status.api_available = self._api is not None
 
         return status
@@ -280,20 +238,7 @@ class DownloaderService:
         progress_callback: Optional[callable] = None,
         playlist: Optional[Any] = None
     ) -> DownloadResult:
-        """
-        Download a song from Apple Music.
-
-        Args:
-            url: Apple Music URL
-            quality: Download quality
-            force: Force download even if file exists
-            progress_callback: Optional progress callback
-            playlist: Optional playlist info for naming
-
-        Returns:
-            DownloadResult with status and file paths
-        """
-        # Parse URL
+        """下载 Apple Music 单曲。"""
         parsed = URLParser.parse(url)
         if not parsed:
             return DownloadResult(
@@ -302,7 +247,6 @@ class DownloaderService:
                 error="URL 解析失败"
             )
 
-        # Check cache
         cache_key = f"{url}|{quality.value}"
         if not force and cache_key in self._cache:
             cached = self._cache[cache_key]
@@ -310,7 +254,6 @@ class DownloaderService:
                 self.logger.info(f"Using cached download result for {url}")
                 return cached
 
-        # Currently only support single song
         if parsed["type"] != URLType.Song:
             return DownloadResult(
                 success=False,
@@ -318,7 +261,6 @@ class DownloaderService:
                 error="仅支持单曲下载"
             )
 
-        # Get wrapper manager
         manager = await self.wrapper_service.get_manager()
         if not manager:
             return DownloadResult(
@@ -327,7 +269,6 @@ class DownloaderService:
                 error="请先启动 Wrapper 服务"
             )
 
-        # Prepare download config
         codec = QUALITY_TO_CODEC.get(quality, Codec.ALAC)
         rip_config = RipDownloadConfig(
             codec=codec,
@@ -348,7 +289,6 @@ class DownloaderService:
         )
 
         try:
-            # Execute download
             self.logger.info(f"[Download] Starting rip_song for song_id={parsed['id']}, storefront={parsed['storefront'] or self.config.region.storefront}")
             result = await rip_song(
                 song_id=parsed["id"],
@@ -360,7 +300,7 @@ class DownloaderService:
                 progress_callback=progress_callback,
                 check_existence=not force,
                 plugin_config=self.config,
-                wrapper_service=self.wrapper_service,  # Pass for fast decrypt_all
+                wrapper_service=self.wrapper_service,  # 传入快速 decrypt_all
                 playlist=playlist
             )
 
@@ -373,7 +313,6 @@ class DownloaderService:
                     error=result.message
                 )
 
-            # Save files
             if result.song_data:
                 saved = save_all(
                     song_data=result.song_data,
@@ -399,12 +338,10 @@ class DownloaderService:
                     }
                 )
 
-                # Cache result
                 self._cache[cache_key] = download_result
 
                 return download_result
 
-            # File already exists (skipped)
             if result.status == DownloadStatus.SKIPPED:
                 expected_path = get_output_path(
                     codec=result.codec or codec,
@@ -437,15 +374,7 @@ class DownloaderService:
         self,
         url: str
     ) -> Optional[Dict[str, Any]]:
-        """
-        Get song metadata without downloading.
-
-        Args:
-            url: Apple Music URL
-
-        Returns:
-            Dictionary with song metadata or None
-        """
+        """获取歌曲元数据但不下载。"""
         parsed = URLParser.parse(url)
         if not parsed or parsed["type"] != URLType.Song:
             return None
@@ -463,16 +392,16 @@ class DownloaderService:
             return None
 
     def get_download_dirs(self, quality: Optional[DownloadQuality] = None) -> List[Path]:
-        """Get download directories."""
+        """获取下载目录列表。"""
         download_dir = self.config.get_download_path()
         return [download_dir]
 
     def clear_cache(self):
-        """Clear download cache."""
+        """清理下载缓存。"""
         self._cache.clear()
         self.logger.info("Download cache cleared")
 
 
-# Keep backward compatibility
-ConfigGenerator = None  # No longer needed, config is handled by core.config
-DockerService = None  # Replaced by WrapperService
+# 兼容旧接口
+ConfigGenerator = None  # 已废弃，由 core.config 接管
+DockerService = None  # 已替换为 WrapperService

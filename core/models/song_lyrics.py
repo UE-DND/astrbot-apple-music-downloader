@@ -1,4 +1,4 @@
-"""Song lyrics model."""
+"""歌词模型。"""
 from typing import List, Optional
 
 from pydantic import BaseModel

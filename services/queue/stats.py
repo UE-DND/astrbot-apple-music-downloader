@@ -1,9 +1,6 @@
 """
-Queue Statistics Collector
-
-
-Collects and computes statistics for the download queue.
-Single responsibility: statistics aggregation and reporting.
+队列统计收集器。
+负责统计聚合与报告。
 """
 
 from __future__ import annotations
@@ -18,12 +15,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class QueueStats:
-    """
-    Snapshot of queue statistics.
-
-    This is a read-only data class representing queue state at a point in time.
-    """
-    # Counts
+    """队列统计快照。"""
     total_tasks: int = 0
     pending_tasks: int = 0
     processing_tasks: int = 0
@@ -32,21 +24,17 @@ class QueueStats:
     cancelled_tasks: int = 0
     timeout_tasks: int = 0
 
-    # Timing averages
     avg_wait_time: float = 0.0
     avg_process_time: float = 0.0
 
-    # Current state
     queue_size: int = 0
     max_queue_size: int = 0
 
-    # Throughput (tasks per minute)
     throughput: float = 0.0
 
-    # Success rate (0.0 - 1.0)
     @property
     def success_rate(self) -> float:
-        """Calculate success rate."""
+        """计算成功率。"""
         total = self.completed_tasks + self.failed_tasks + self.timeout_tasks
         if total == 0:
             return 0.0
@@ -55,7 +43,7 @@ class QueueStats:
 
 @dataclass
 class TaskTiming:
-    """Timing data for a single task."""
+    """单个任务的时间统计。"""
     task_id: str
     wait_time: float
     process_time: float
@@ -64,61 +52,29 @@ class TaskTiming:
 
 
 class QueueStatsCollector:
-    """
-    Collects and computes queue statistics.
-
-    Features:
-    - Real-time statistics collection
-    - Rolling window for throughput calculation
-    - Memory-efficient with configurable history size
-    - Thread-safe design
-
-    Usage:
-        collector = QueueStatsCollector(max_history=1000)
-
-        # Record task completion
-        collector.record_completion(task)
-        collector.record_failure(task)
-
-        # Get statistics
-        stats = collector.get_stats(pending_count=5, queue_size=10, max_size=20)
-    """
+    """收集并计算队列统计信息。"""
 
     def __init__(
         self,
         max_history: int = 1000,
-        throughput_window: float = 300.0  # 5 minutes
+        throughput_window: float = 300.0  # 5 分钟
     ):
-        """
-        Initialize statistics collector.
-
-        Args:
-            max_history: Maximum number of task timings to keep
-            throughput_window: Time window (seconds) for throughput calculation
-        """
+        """初始化统计收集器。"""
         self._max_history = max_history
         self._throughput_window = throughput_window
 
-        # Task timing history (for averages and throughput)
         self._timings: deque[TaskTiming] = deque(maxlen=max_history)
 
-        # Counters (never reset)
         self._total_completed = 0
         self._total_failed = 0
         self._total_cancelled = 0
         self._total_timeout = 0
 
-        # Aggregates for averages
         self._total_wait_time = 0.0
         self._total_process_time = 0.0
 
     def record_completion(self, task: DownloadTask) -> None:
-        """
-        Record a successful task completion.
-
-        Args:
-            task: The completed task
-        """
+        """记录任务成功完成。"""
         timing = TaskTiming(
             task_id=task.task_id,
             wait_time=task.wait_time,
@@ -133,13 +89,7 @@ class QueueStatsCollector:
         self._total_process_time += task.process_time
 
     def record_failure(self, task: DownloadTask, reason: str = "failed") -> None:
-        """
-        Record a failed task.
-
-        Args:
-            task: The failed task
-            reason: Failure reason ("failed", "timeout", "cancelled")
-        """
+        """记录任务失败。"""
         timing = TaskTiming(
             task_id=task.task_id,
             wait_time=task.wait_time,
@@ -166,18 +116,7 @@ class QueueStatsCollector:
         queue_size: int = 0,
         max_queue_size: int = 0
     ) -> QueueStats:
-        """
-        Get current statistics snapshot.
-
-        Args:
-            pending_count: Current number of pending tasks
-            processing_count: Current number of processing tasks
-            queue_size: Current queue size
-            max_queue_size: Maximum queue size
-
-        Returns:
-            QueueStats snapshot
-        """
+        """获取当前统计快照。"""
         total_tasks = (
             self._total_completed +
             self._total_failed +
@@ -185,7 +124,6 @@ class QueueStatsCollector:
             self._total_timeout
         )
 
-        # Calculate averages
         avg_wait = 0.0
         avg_process = 0.0
         if total_tasks > 0:
@@ -209,42 +147,27 @@ class QueueStatsCollector:
         )
 
     def _calculate_throughput(self) -> float:
-        """
-        Calculate throughput (successful tasks per minute) over the window.
-
-        Returns:
-            Tasks per minute
-        """
+        """计算吞吐量（窗口内每分钟成功任务数）。"""
         if not self._timings:
             return 0.0
 
         now = time.time()
         window_start = now - self._throughput_window
 
-        # Count successful tasks in window
         successful_in_window = sum(
             1 for t in self._timings
             if t.completed_at >= window_start and t.success
         )
 
-        # Convert to per-minute rate
         window_minutes = self._throughput_window / 60.0
         return successful_in_window / window_minutes
 
     def get_recent_timings(self, count: int = 10) -> List[TaskTiming]:
-        """
-        Get recent task timings.
-
-        Args:
-            count: Number of recent timings to return
-
-        Returns:
-            List of recent TaskTiming objects
-        """
+        """获取最近任务时间统计。"""
         return list(self._timings)[-count:]
 
     def reset(self) -> None:
-        """Reset all statistics."""
+        """重置全部统计。"""
         self._timings.clear()
         self._total_completed = 0
         self._total_failed = 0

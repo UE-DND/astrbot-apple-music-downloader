@@ -1,8 +1,6 @@
 """
-Health Monitor
-
-Monitors wrapper instances and automatically recovers from failures.
-Provides continuous health checking, failure detection, and automatic restart logic.
+健康监控器。
+监控实例健康并自动恢复。
 """
 
 import asyncio
@@ -18,16 +16,16 @@ from .instance_manager import InstanceManager, WrapperInstance, InstanceStatus
 
 
 class HealthStatus(Enum):
-    """Health status of an instance."""
+    """实例健康状态。"""
     HEALTHY = "healthy"
-    DEGRADED = "degraded"  # Some issues but still functional
-    UNHEALTHY = "unhealthy"  # Not functional, needs recovery
-    RECOVERING = "recovering"  # Currently being recovered
+    DEGRADED = "degraded"  # 部分异常但仍可用
+    UNHEALTHY = "unhealthy"  # 不可用，需要恢复
+    RECOVERING = "recovering"  # 恢复中
 
 
 @dataclass
 class HealthCheckResult:
-    """Result of a health check."""
+    """健康检查结果。"""
     instance_id: str
     status: HealthStatus
     timestamp: datetime = field(default_factory=datetime.now)
@@ -38,25 +36,15 @@ class HealthCheckResult:
 
 @dataclass
 class RecoveryAction:
-    """Recovery action to perform."""
+    """恢复动作。"""
     instance_id: str
-    action_type: str  # "restart", "recreate", "alert"
+    action_type: str  # 重启 / 重建 / 告警
     reason: str
     timestamp: datetime = field(default_factory=datetime.now)
 
 
 class HealthMonitor:
-    """
-    Monitors instance health and performs automatic recovery.
-
-    Features:
-    - Periodic health checks
-    - Failure detection with configurable thresholds
-    - Automatic restart for failed instances
-    - Exponential backoff for repeated failures
-    - Health metrics collection
-    - Recovery callbacks for notifications
-    """
+    """实例健康监控与自动恢复。"""
 
     def __init__(
         self,
@@ -66,33 +54,24 @@ class HealthMonitor:
         recovery_enabled: bool = True,
         max_recovery_attempts: int = 5,
     ):
-        """
-        Initialize health monitor.
-
-        Args:
-            instance_manager: InstanceManager to monitor
-            check_interval: Health check interval in seconds
-            failure_threshold: Number of consecutive failures before recovery
-            recovery_enabled: Whether to enable automatic recovery
-            max_recovery_attempts: Maximum recovery attempts per instance
-        """
+        """初始化健康监控器。"""
         self.instance_manager = instance_manager
         self.check_interval = check_interval
         self.failure_threshold = failure_threshold
         self.recovery_enabled = recovery_enabled
         self.max_recovery_attempts = max_recovery_attempts
 
-        # Health tracking
+        # 健康记录
         self._health_history: Dict[str, List[HealthCheckResult]] = {}
         self._recovery_attempts: Dict[str, int] = {}
         self._last_recovery: Dict[str, datetime] = {}
 
-        # Callbacks
+        # 回调
         self._on_health_change: Optional[Callable[[str, HealthStatus, HealthStatus], Awaitable[None]]] = None
         self._on_recovery_start: Optional[Callable[[RecoveryAction], Awaitable[None]]] = None
         self._on_recovery_complete: Optional[Callable[[str, bool, str], Awaitable[None]]] = None
 
-        # Control
+        # 控制
         self._running = False
         self._monitor_task: Optional[asyncio.Task] = None
 
@@ -102,40 +81,25 @@ class HealthMonitor:
         self,
         callback: Callable[[str, HealthStatus, HealthStatus], Awaitable[None]]
     ):
-        """
-        Set callback for health status changes.
-
-        Args:
-            callback: async function(instance_id, old_status, new_status)
-        """
+        """设置健康状态变化回调。"""
         self._on_health_change = callback
 
     def set_recovery_start_callback(
         self,
         callback: Callable[[RecoveryAction], Awaitable[None]]
     ):
-        """
-        Set callback for recovery start events.
-
-        Args:
-            callback: async function(recovery_action)
-        """
+        """设置恢复开始回调。"""
         self._on_recovery_start = callback
 
     def set_recovery_complete_callback(
         self,
         callback: Callable[[str, bool, str], Awaitable[None]]
     ):
-        """
-        Set callback for recovery completion.
-
-        Args:
-            callback: async function(instance_id, success, message)
-        """
+        """设置恢复完成回调。"""
         self._on_recovery_complete = callback
 
     async def start(self):
-        """Start health monitoring."""
+        """启动健康监控。"""
         if self._running:
             logger.warning("Health monitor already running")
             return
@@ -145,7 +109,7 @@ class HealthMonitor:
         logger.info("Health monitor started")
 
     async def stop(self):
-        """Stop health monitoring."""
+        """停止健康监控。"""
         if not self._running:
             return
 
@@ -161,7 +125,7 @@ class HealthMonitor:
         logger.info("Health monitor stopped")
 
     async def _monitor_loop(self):
-        """Main monitoring loop."""
+        """主监控循环。"""
         while self._running:
             try:
                 await self._perform_health_checks()
@@ -173,7 +137,7 @@ class HealthMonitor:
                 await asyncio.sleep(self.check_interval)
 
     async def _perform_health_checks(self):
-        """Perform health checks on all instances."""
+        """对所有实例执行健康检查。"""
         instances = self.instance_manager.list_instances()
 
         if not instances:
@@ -181,7 +145,7 @@ class HealthMonitor:
 
         logger.debug(f"Performing health checks on {len(instances)} instances")
 
-        # Run checks concurrently
+        # 并发执行检查
         tasks = []
         for instance in instances:
             if instance.status != InstanceStatus.STOPPED:
@@ -191,7 +155,7 @@ class HealthMonitor:
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # Process results
+            # 处理结果
             for result in results:
                 if isinstance(result, Exception):
                     logger.error(f"Health check exception: {result}")
@@ -199,20 +163,12 @@ class HealthMonitor:
                     await self._process_health_result(result)
 
     async def _check_instance_health(self, instance: WrapperInstance) -> HealthCheckResult:
-        """
-        Check health of a single instance.
-
-        Args:
-            instance: Instance to check
-
-        Returns:
-            HealthCheckResult
-        """
+        """检查单个实例健康状态。"""
         instance_id = instance.instance_id
         start_time = datetime.now()
 
         try:
-            # Perform health check
+        # 执行健康检查
             if not instance.proxy:
                 return HealthCheckResult(
                     instance_id=instance_id,
@@ -220,13 +176,13 @@ class HealthMonitor:
                     error="No proxy available",
                 )
 
-            # Check if proxy is responsive
+        # 检查代理响应
             healthy = await asyncio.wait_for(
                 instance.proxy.health_check(),
                 timeout=5.0
             )
 
-            # Calculate response time
+        # 计算响应时间
             response_time = (datetime.now() - start_time).total_seconds() * 1000
 
             if healthy:
@@ -237,7 +193,7 @@ class HealthMonitor:
                     consecutive_failures=0,
                 )
             else:
-                # Get previous failures
+                # 获取历史失败记录
                 prev_failures = self._get_consecutive_failures(instance_id)
 
                 return HealthCheckResult(
@@ -267,12 +223,12 @@ class HealthMonitor:
             )
 
     def _get_consecutive_failures(self, instance_id: str) -> int:
-        """Get number of consecutive failures for an instance."""
+        """获取实例连续失败次数。"""
         history = self._health_history.get(instance_id, [])
         if not history:
             return 0
 
-        # Count failures from the end
+        # 从末尾统计连续失败次数
         failures = 0
         for result in reversed(history):
             if result.status == HealthStatus.HEALTHY:
@@ -282,30 +238,25 @@ class HealthMonitor:
         return failures
 
     async def _process_health_result(self, result: HealthCheckResult):
-        """
-        Process health check result and trigger recovery if needed.
-
-        Args:
-            result: HealthCheckResult to process
-        """
+        """处理健康检查结果并触发恢复。"""
         instance_id = result.instance_id
 
-        # Store result in history
+        # 记录结果
         if instance_id not in self._health_history:
             self._health_history[instance_id] = []
 
         self._health_history[instance_id].append(result)
 
-        # Keep only last 100 results
+        # 仅保留最近 100 条
         if len(self._health_history[instance_id]) > 100:
             self._health_history[instance_id] = self._health_history[instance_id][-100:]
 
-        # Check if recovery is needed
+        # 判断是否需要恢复
         if result.status == HealthStatus.UNHEALTHY:
             if result.consecutive_failures >= self.failure_threshold:
                 await self._trigger_recovery(result)
 
-        # Log health status
+        # 记录健康状态
         if result.status != HealthStatus.HEALTHY:
             logger.warning(
                 f"Instance {instance_id} health: {result.status.value} "
@@ -313,19 +264,14 @@ class HealthMonitor:
             )
 
     async def _trigger_recovery(self, result: HealthCheckResult):
-        """
-        Trigger recovery for an unhealthy instance.
-
-        Args:
-            result: HealthCheckResult that triggered recovery
-        """
+        """触发异常实例恢复。"""
         instance_id = result.instance_id
 
         if not self.recovery_enabled:
             logger.warning(f"Recovery disabled, skipping instance {instance_id}")
             return
 
-        # Check recovery attempts
+        # 检查恢复次数
         attempts = self._recovery_attempts.get(instance_id, 0)
         if attempts >= self.max_recovery_attempts:
             logger.error(
@@ -338,38 +284,38 @@ class HealthMonitor:
                 instance.no_restart = True
             return
 
-        # Check if recently recovered (exponential backoff)
+        # 检查是否刚恢复过（指数退避）
         if instance_id in self._last_recovery:
             last_recovery = self._last_recovery[instance_id]
-            min_interval = timedelta(seconds=30 * (2 ** attempts))  # Exponential backoff
+            min_interval = timedelta(seconds=30 * (2 ** attempts))  # 指数退避
 
             if datetime.now() - last_recovery < min_interval:
                 logger.debug(f"Skipping recovery for {instance_id}, too soon after last attempt")
                 return
 
-        # Create recovery action
+        # 创建恢复动作
         action = RecoveryAction(
             instance_id=instance_id,
             action_type="restart",
             reason=f"Consecutive failures: {result.consecutive_failures}, error: {result.error}",
         )
 
-        # Notify recovery start
+        # 通知恢复开始
         if self._on_recovery_start:
             try:
                 await self._on_recovery_start(action)
             except Exception as e:
                 logger.error(f"Error in recovery start callback: {e}")
 
-        # Perform recovery
+        # 执行恢复
         logger.info(f"Starting recovery for instance {instance_id} (attempt {attempts + 1}/{self.max_recovery_attempts})")
         success, message = await self._perform_recovery(instance_id)
 
-        # Update tracking
+        # 更新跟踪状态
         self._recovery_attempts[instance_id] = attempts + 1
         self._last_recovery[instance_id] = datetime.now()
 
-        # Notify recovery complete
+        # 通知恢复完成
         if self._on_recovery_complete:
             try:
                 await self._on_recovery_complete(instance_id, success, message)
@@ -378,43 +324,35 @@ class HealthMonitor:
 
         if success:
             logger.info(f"Recovery successful for instance {instance_id}: {message}")
-            # Reset failure count
+            # 重置失败计数
             self._recovery_attempts[instance_id] = 0
         else:
             logger.error(f"Recovery failed for instance {instance_id}: {message}")
 
     async def _perform_recovery(self, instance_id: str) -> tuple[bool, str]:
-        """
-        Perform recovery actions for an instance.
-
-        Args:
-            instance_id: Instance to recover
-
-        Returns:
-            Tuple of (success, message)
-        """
+        """执行实例恢复动作。"""
         instance = self.instance_manager.get_instance(instance_id)
         if not instance:
             return False, "Instance not found"
 
         try:
-            # Mark as recovering
+            # 标记为恢复中
             old_status = instance.status
             instance.status = InstanceStatus.INITIALIZING
 
-            # Stop proxy
+            # 停止代理
             if instance.proxy:
                 try:
                     await instance.proxy.stop()
                 except Exception as e:
                     logger.warning(f"Error stopping proxy during recovery: {e}")
 
-            # Restart proxy
+            # 重启代理
             if instance.proxy:
-                await asyncio.sleep(1)  # Brief delay
+                await asyncio.sleep(1)  # 短暂延时
                 await instance.proxy.start()
 
-                # Verify health
+                # 复核健康状态
                 await asyncio.sleep(2)
                 healthy = await instance.proxy.health_check()
 
@@ -434,15 +372,7 @@ class HealthMonitor:
             return False, f"Recovery exception: {str(e)}"
 
     def get_health_status(self, instance_id: str) -> Optional[HealthStatus]:
-        """
-        Get current health status of an instance.
-
-        Args:
-            instance_id: Instance ID
-
-        Returns:
-            HealthStatus or None
-        """
+        """获取实例当前健康状态。"""
         history = self._health_history.get(instance_id)
         if not history:
             return None
@@ -450,15 +380,7 @@ class HealthMonitor:
         return history[-1].status
 
     def get_health_metrics(self, instance_id: str) -> Dict:
-        """
-        Get health metrics for an instance.
-
-        Args:
-            instance_id: Instance ID
-
-        Returns:
-            Dict with health metrics
-        """
+        """获取实例健康指标。"""
         history = self._health_history.get(instance_id, [])
 
         if not history:
@@ -474,7 +396,7 @@ class HealthMonitor:
         healthy_count = sum(1 for r in history if r.status == HealthStatus.HEALTHY)
         unhealthy_count = sum(1 for r in history if r.status == HealthStatus.UNHEALTHY)
 
-        # Calculate average response time
+        # 计算平均响应时间
         response_times = [r.response_time_ms for r in history if r.response_time_ms is not None]
         avg_response_time = sum(response_times) / len(response_times) if response_times else 0
 
@@ -490,12 +412,7 @@ class HealthMonitor:
         }
 
     def get_all_metrics(self) -> Dict[str, Dict]:
-        """
-        Get health metrics for all instances.
-
-        Returns:
-            Dict mapping instance_id to metrics
-        """
+        """获取所有实例健康指标。"""
         return {
             instance_id: self.get_health_metrics(instance_id)
             for instance_id in self._health_history.keys()

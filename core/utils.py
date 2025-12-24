@@ -1,9 +1,5 @@
 """
-Utility Functions for Apple Music Downloader
-
-
-Provides common utility functions for file handling, codec detection,
-lyrics conversion, and path management.
+Apple Music 下载器工具函数。
 """
 
 import asyncio
@@ -25,19 +21,19 @@ from .types import Codec, CodecRegex
 from .models import PlaylistInfo
 
 
-# Thread pool for sync operations
+# 同步任务线程池
 executor_pool = concurrent.futures.ThreadPoolExecutor()
 
 
 def if_shell() -> bool:
-    """Check if shell mode should be used for subprocess calls."""
+    """判断子进程是否需要 shell 模式。"""
     if sys.platform in ('win32', 'cygwin', 'cli'):
         return False
     return True
 
 
 def byte_length(i: int) -> int:
-    """Calculate the byte length needed to represent an integer."""
+    """计算表示整数所需字节数。"""
     return (i.bit_length() + 7) // 8
 
 
@@ -47,18 +43,7 @@ def find_best_codec(
     max_bit_depth: int = 24,
     max_sample_rate: int = 192000
 ) -> Optional[m3u8.Playlist]:
-    """
-    Find the best matching codec playlist from M3U8.
-
-    Args:
-        parsed_m3u8: Parsed M3U8 object
-        codec: Target codec
-        max_bit_depth: Maximum bit depth for ALAC
-        max_sample_rate: Maximum sample rate for ALAC
-
-    Returns:
-        Best matching playlist or None
-    """
+    """从 M3U8 中选择最合适的编码播放列表。"""
     available_medias = [
         playlist for playlist in parsed_m3u8.playlists
         if regex.match(CodecRegex.get_pattern_by_codec(codec), playlist.stream_info.audio)
@@ -80,13 +65,13 @@ def find_best_codec(
 
 
 def chunk(it, size: int):
-    """Split an iterable into chunks of specified size."""
+    """将可迭代对象按固定大小分块。"""
     it = iter(it)
     return iter(lambda: tuple(islice(it, size)), ())
 
 
 def get_digit_from_string(text: str) -> int:
-    """Extract digits from a string and convert to integer."""
+    """提取字符串中的数字并转为整数。"""
     return int(''.join(filter(str.isdigit, text)))
 
 
@@ -95,17 +80,7 @@ def ttml_convent(
     lyrics_format: str = "lrc",
     lyrics_extra: list[str] = None
 ) -> str:
-    """
-    Convert TTML lyrics to LRC format.
-
-    Args:
-        ttml: TTML lyrics content
-        lyrics_format: Target format (ttml or lrc)
-        lyrics_extra: Extra lyrics to include (translation, pronunciation)
-
-    Returns:
-        Converted lyrics string
-    """
+    """将 TTML 歌词转换为 LRC/TTML。"""
     if lyrics_format == "ttml":
         return ttml
 
@@ -154,13 +129,13 @@ def ttml_convent(
             timestamp = f"[{str(m + h * 60).rjust(2, '0')}:{str(s).rjust(2, '0')}.{str(int(ms / 10)).rjust(2, '0')}]"
             lrc_lines.append(f"{timestamp}{lyric.text}")
 
-            # Handle translation
+            # 处理翻译歌词
             if "translation" in lyrics_extra and b.tt.head.metadata.iTunesMetadata.translation:
                 for translation in b.tt.head.metadata.iTunesMetadata.translation.children:
                     if lyric.get("itunes:key") == translation.get("for"):
                         lrc_lines.append(f"{timestamp}{translation.text}")
 
-            # Handle pronunciation (transliteration)
+            # 处理注音歌词
             if "pronunciation" in lyrics_extra and b.tt.head.metadata.iTunesMetadata.transliteration:
                 for transliteration in b.tt.head.metadata.iTunesMetadata.transliteration.children:
                     if lyric.get("itunes:key") == transliteration.get("for"):
@@ -170,25 +145,17 @@ def ttml_convent(
 
 
 def get_valid_filename(filename: str) -> str:
-    """Remove invalid characters from filename."""
+    """清理文件名中的非法字符。"""
     return "".join(i for i in filename if i not in ["<", ">", ":", "\"", "/", "\\", "|", "?", "*"])
 
 
 def get_valid_dir_name(dirname: str) -> str:
-    """Remove invalid characters from directory name."""
+    """清理目录名中的非法字符。"""
     return regex.sub(r"\.+$", "", get_valid_filename(dirname))
 
 
 def get_codec_from_codec_id(codec_id: str) -> str:
-    """
-    Get codec type from codec ID string.
-
-    Args:
-        codec_id: Codec identifier string
-
-    Returns:
-        Codec constant or empty string
-    """
+    """根据 codec_id 解析编码类型。"""
     codecs = [
         Codec.AC3, Codec.EC3, Codec.AAC, Codec.ALAC,
         Codec.AAC_BINAURAL, Codec.AAC_DOWNMIX
@@ -200,29 +167,20 @@ def get_codec_from_codec_id(codec_id: str) -> str:
 
 
 def get_song_id_from_m3u8(m3u8_url: str) -> str:
-    """Extract song ID from M3U8 URL."""
+    """从 M3U8 URL 提取歌曲 ID。"""
     parsed_m3u8 = m3u8.load(m3u8_url)
     return regex.search(r"_A(\d*)_", parsed_m3u8.playlists[0].uri)[1]
 
 
 def if_raw_atmos(codec: str, convert_atmos: bool) -> bool:
-    """Check if output should be raw Atmos format."""
+    """判断是否输出原始 Atmos。"""
     if (codec == Codec.EC3 or codec == Codec.AC3) and not convert_atmos:
         return True
     return False
 
 
 def get_suffix(codec: str, convert_atmos: bool) -> str:
-    """
-    Get file suffix based on codec and conversion settings.
-
-    Args:
-        codec: Audio codec
-        convert_atmos: Whether to convert Atmos to M4A
-
-    Returns:
-        File extension string
-    """
+    """根据编码与 Atmos 设置返回文件后缀。"""
     if not convert_atmos and codec == Codec.EC3:
         return ".ec3"
     elif not convert_atmos and codec == Codec.AC3:
@@ -232,7 +190,7 @@ def get_suffix(codec: str, convert_atmos: bool) -> str:
 
 
 def playlist_metadata_to_params(playlist: PlaylistInfo) -> dict:
-    """Extract playlist metadata for path formatting."""
+    """提取歌单元数据用于路径格式化。"""
     return {
         "playlistName": playlist.data[0].attributes.name,
         "playlistCuratorName": playlist.data[0].attributes.curatorName
@@ -240,7 +198,7 @@ def playlist_metadata_to_params(playlist: PlaylistInfo) -> dict:
 
 
 def get_path_safe_dict(param: dict) -> dict:
-    """Make all string values in dict safe for file paths."""
+    """将字典中的字符串值转换为安全路径格式。"""
     new_param = deepcopy(param)
     for key, val in new_param.items():
         if isinstance(val, str):
@@ -254,18 +212,7 @@ def get_song_name_and_dir_path(
     config: Any,
     playlist: PlaylistInfo = None
 ) -> tuple[str, Path]:
-    """
-    Generate song filename and directory path from metadata.
-
-    Args:
-        codec: Audio codec
-        metadata: Song metadata object
-        config: Plugin configuration
-        playlist: Playlist info (optional)
-
-    Returns:
-        Tuple of (song_name, dir_path)
-    """
+    """从元数据生成歌曲文件名与目录路径。"""
     safe_meta = get_path_safe_dict(metadata.model_dump())
 
     if playlist:
@@ -308,18 +255,7 @@ def check_song_exists(
     config: Any,
     playlist: PlaylistInfo = None
 ) -> bool:
-    """
-    Check if a song file already exists.
-
-    Args:
-        metadata: Song metadata
-        codec: Audio codec
-        config: Plugin configuration
-        playlist: Playlist info (optional)
-
-    Returns:
-        True if file exists
-    """
+    """检查歌曲文件是否已存在。"""
     song_name, dir_path = get_song_name_and_dir_path(codec, metadata, config, playlist)
     download_dir = config.get_download_path()
     full_path = download_dir / dir_path / Path(
@@ -329,28 +265,20 @@ def check_song_exists(
 
 
 def playlist_write_song_index(playlist: PlaylistInfo) -> PlaylistInfo:
-    """Write song index mapping to playlist info."""
+    """写入歌单歌曲索引映射。"""
     for track_index, track in enumerate(playlist.data[0].relationships.tracks.data):
         playlist.songIdIndexMapping[track.id] = track_index + 1
     return playlist
 
 
 def convert_mac_timestamp_to_datetime(timestamp: int) -> datetime:
-    """Convert Mac timestamp to datetime object."""
+    """将 Mac 时间戳转换为 datetime。"""
     d = datetime.strptime("01-01-1904", "%m-%d-%Y")
     return d + timedelta(seconds=timestamp)
 
 
 def check_dependencies(deps: list[str] = None) -> tuple[bool, Optional[str]]:
-    """
-    Check if required external dependencies are available.
-
-    Args:
-        deps: List of dependency commands to check
-
-    Returns:
-        Tuple of (success, missing_dep_name)
-    """
+    """检查外部依赖是否可用。"""
     if deps is None:
         deps = ["ffmpeg", "gpac", "MP4Box", "mp4edit", "mp4extract", "mp4decrypt"]
 
@@ -368,31 +296,13 @@ def check_dependencies(deps: list[str] = None) -> tuple[bool, Optional[str]]:
 
 
 async def run_sync(task: Callable, *args) -> Any:
-    """
-    Run a synchronous function in the executor pool.
-
-    Args:
-        task: Synchronous callable
-        *args: Arguments to pass to the function
-
-    Returns:
-        Function result
-    """
+    """在线程池中执行同步函数。"""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(executor_pool, task, *args)
 
 
 def query_language(region: str, storefronts_path: str = "assets/storefronts.json") -> Optional[tuple[str, list[str]]]:
-    """
-    Query default and supported languages for a region.
-
-    Args:
-        region: Region/storefront code
-        storefronts_path: Path to storefronts JSON file
-
-    Returns:
-        Tuple of (default_language, supported_languages) or None
-    """
+    """查询地区默认语言与支持语言。"""
     try:
         with open(storefronts_path, "r", encoding="utf-8") as f:
             storefronts = json.load(f)
@@ -408,17 +318,7 @@ def query_language(region: str, storefronts_path: str = "assets/storefronts.json
 
 
 def language_exist(region: str, language: str, storefronts_path: str = "assets/storefronts.json") -> bool:
-    """
-    Check if a language is supported in a region.
-
-    Args:
-        region: Region/storefront code
-        language: Language tag to check
-        storefronts_path: Path to storefronts JSON file
-
-    Returns:
-        True if language is supported
-    """
+    """检查地区是否支持指定语言。"""
     result = query_language(region, storefronts_path)
     if result is None:
         return False

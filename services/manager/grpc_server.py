@@ -1,8 +1,6 @@
 """
-Native Wrapper Manager gRPC Server
-
-Implements the WrapperManagerService gRPC protocol in pure Python.
-Compatible with existing client code that uses the gRPC interface.
+原生 wrapper 管理器 gRPC 服务端。
+以纯 Python 实现 WrapperManagerService。
 """
 
 import asyncio
@@ -13,8 +11,8 @@ from typing import Optional
 from ..logger import LoggerInterface, get_logger
 logger = get_logger()
 
-# Import generated protobuf code
-# Support both relative and absolute imports for standalone usage
+# 导入生成的 protobuf 代码
+# 兼容相对/绝对导入（支持独立运行）
 try:
     from ...core.grpc import manager_pb2, manager_pb2_grpc
 except ImportError:
@@ -28,11 +26,7 @@ from .health_monitor import HealthMonitor, HealthStatus, RecoveryAction
 
 
 class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceServicer):
-    """
-    gRPC servicer implementation.
-
-    Implements all RPC methods defined in manager.proto.
-    """
+    """服务实现（gRPC）。"""
 
     def __init__(
         self,
@@ -40,21 +34,14 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
         dispatcher: DecryptDispatcher,
         login_handler: LoginHandler
     ):
-        """
-        Initialize servicer.
-
-        Args:
-            instance_manager: Instance manager
-            dispatcher: Decrypt dispatcher
-            login_handler: Login handler
-        """
+        """初始化 gRPC 服务实现。"""
         self.instance_manager = instance_manager
         self.dispatcher = dispatcher
         self.login_handler = login_handler
         self._ready = False
 
     def set_ready(self, ready: bool):
-        """Set service ready status."""
+        """设置服务就绪状态。"""
         self._ready = ready
 
     async def Status(
@@ -62,11 +49,7 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
         request: empty_pb2.Empty,
         context: grpc.aio.ServicerContext
     ) -> manager_pb2.StatusReply:
-        """
-        Get service status.
-
-        Returns current status including active instances and regions.
-        """
+        """获取服务状态。"""
         try:
             regions = self.instance_manager.get_regions()
             client_count = self.instance_manager.get_client_count()
@@ -97,18 +80,13 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
         request_iterator,
         context: grpc.aio.ServicerContext
     ):
-        """
-        Handle login stream (bidirectional).
-
-        Client sends login credentials, server responds with status updates.
-        Supports 2FA workflow.
-        """
+        """处理登录双向流。"""
         try:
             async for request in request_iterator:
                 data = request.data
 
                 if data.two_step_code:
-                    # Handle 2FA code
+                    # 处理 2FA
                     success, msg = await self.login_handler.provide_2fa_code(
                         username=data.username,
                         code=data.two_step_code
@@ -126,21 +104,21 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
                         )
 
                 else:
-                    # Start login
+                    # 开始登录
                     success, msg, session_id = await self.login_handler.start_login(
                         username=data.username,
                         password=data.password
                     )
 
                     if success or "双因素" in msg or "2FA" in msg:
-                        # Login started or 2FA required
+                        # 登录开始或需要 2FA
                         code = 1 if "2FA" in msg or "双因素" in msg else 0
                         yield manager_pb2.LoginReply(
                             header=manager_pb2.ReplyHeader(code=code, msg=msg),
                             data=manager_pb2.LoginData(username=data.username)
                         )
                     else:
-                        # Login failed
+                        # 登录失败
                         yield manager_pb2.LoginReply(
                             header=manager_pb2.ReplyHeader(code=-1, msg=msg),
                             data=manager_pb2.LoginData(username=data.username)
@@ -155,15 +133,11 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
         request: manager_pb2.LogoutRequest,
         context: grpc.aio.ServicerContext
     ) -> manager_pb2.LogoutReply:
-        """
-        Handle logout request.
-
-        Removes the specified account instance.
-        """
+        """处理登出请求。"""
         try:
             username = request.data.username
 
-            # Find instance
+            # 查找实例
             instance = self.instance_manager.get_instance_by_username(username)
             if not instance:
                 return manager_pb2.LogoutReply(
@@ -174,7 +148,7 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
                     data=manager_pb2.LogoutData(username=username)
                 )
 
-            # Remove instance
+            # 移除实例
             success, msg = await self.instance_manager.remove_instance(instance.instance_id)
 
             return manager_pb2.LogoutReply(
@@ -197,17 +171,12 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
         request_iterator,
         context: grpc.aio.ServicerContext
     ):
-        """
-        Handle decrypt stream (bidirectional).
-
-        Client sends encrypted samples, server returns decrypted data.
-        Supports KEEPALIVE messages to maintain connection.
-        """
+        """处理解密双向流。"""
         try:
             async for request in request_iterator:
                 data = request.data
 
-                # Handle KEEPALIVE (connection health check)
+                # 处理 KEEPALIVE（连接保活）
                 if data.adam_id == "KEEPALIVE":
                     yield manager_pb2.DecryptReply(
                         header=manager_pb2.ReplyHeader(
@@ -223,7 +192,7 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
                     )
                     continue
 
-                # Create decrypt task
+                # 创建解密任务
                 task = DecryptTask(
                     adam_id=data.adam_id,
                     key=data.key,
@@ -231,12 +200,12 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
                     sample_index=data.sample_index
                 )
 
-                # Dispatch task
+                # 分发任务
                 try:
                     logger.debug(f"[Decrypt] Dispatching task for {task.adam_id}[{task.sample_index}]")
                     result = await self.dispatcher.dispatch(task)
 
-                    # Send response
+                    # 返回响应
                     yield manager_pb2.DecryptReply(
                         header=manager_pb2.ReplyHeader(
                             code=0 if result.success else -1,
@@ -251,7 +220,7 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
                     )
                 except Exception as task_error:
                     logger.error(f"Decrypt task error for {data.adam_id}: {task_error}")
-                    # Send error response but keep stream alive
+                    # 返回错误但保持流
                     yield manager_pb2.DecryptReply(
                         header=manager_pb2.ReplyHeader(
                             code=-1,
@@ -267,20 +236,18 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
 
         except Exception as e:
             logger.error(f"Decrypt stream error: {e}", exc_info=True)
-            # Don't abort - let the stream close naturally
+            # 不主动终止，交由流自然关闭
 
     async def M3U8(
         self,
         request: manager_pb2.M3U8Request,
         context: grpc.aio.ServicerContext
     ) -> manager_pb2.M3U8Reply:
-        """
-        Get M3U8 playlist URL for a song.
-        """
+        """获取歌曲 M3U8 链接。"""
         try:
             adam_id = request.data.adam_id
 
-            # Select an instance
+            # 选择实例
             instances = self.instance_manager.list_instances()
             active_instances = [inst for inst in instances if inst.is_active()]
 
@@ -292,9 +259,9 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
                     )
                 )
 
-            instance = active_instances[0]  # Use first active instance
+            instance = active_instances[0]  # 使用首个可用实例
 
-            # Get M3U8
+            # 获取 M3U8
             if instance.proxy:
                 success, m3u8, error = await instance.proxy.get_m3u8(adam_id)
 
@@ -324,11 +291,7 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
         request: manager_pb2.LyricsRequest,
         context: grpc.aio.ServicerContext
     ) -> manager_pb2.LyricsReply:
-        """
-        Get song lyrics.
-
-        Calls Apple Music API directly using tokens from wrapper instance.
-        """
+        """获取歌曲歌词。"""
         try:
             import aiohttp
             import re
@@ -336,7 +299,7 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
 
             data = request.data
 
-            # Select an instance (prefer matching region)
+            # 选择实例（优先匹配地区）
             instances = self.instance_manager.list_instances()
             active_instances = [inst for inst in instances if inst.is_active()]
 
@@ -345,14 +308,14 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
                     header=manager_pb2.ReplyHeader(code=-1, msg="没有可用的实例")
                 )
 
-            # Try to find instance with matching region first
+            # 优先寻找地区匹配的实例
             instance = None
             for inst in active_instances:
                 if inst.region.lower() == data.region.lower():
                     instance = inst
                     break
 
-            # Fall back to first active instance
+            # 回退到首个可用实例
             if not instance:
                 instance = active_instances[0]
 
@@ -361,7 +324,7 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
                     header=manager_pb2.ReplyHeader(code=-1, msg="实例无效")
                 )
 
-            # Get account info (dev_token and music_token)
+            # 获取账号信息（dev_token 与 music_token）
             account_info = await instance.proxy.get_account_info()
             if not account_info:
                 return manager_pb2.LyricsReply(
@@ -376,7 +339,7 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
                     header=manager_pb2.ReplyHeader(code=-1, msg=f"Token 缺失: dev_token={bool(dev_token)}, music_token={bool(music_token)}")
                 )
 
-            # Call Apple Music API for lyrics
+            # 调用 Apple Music API 获取歌词
             url = f"https://amp-api.music.apple.com/v1/catalog/{instance.region}/songs/{data.adam_id}/syllable-lyrics"
             params = {
                 "l[lyrics]": data.language,
@@ -400,14 +363,14 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
 
                     resp_json = await resp.json()
 
-                    # Check for API errors
+                    # 检查 API 错误
                     if "errors" in resp_json:
                         error_msg = str(resp_json["errors"])
                         return manager_pb2.LyricsReply(
                             header=manager_pb2.ReplyHeader(code=-1, msg=f"API 错误: {error_msg}")
                         )
 
-                    # Extract TTML lyrics
+                    # 提取 TTML 歌词
                     if "data" in resp_json and len(resp_json["data"]) > 0:
                         ttml = resp_json["data"][0].get("attributes", {}).get("ttmlLocalizations")
                         if ttml:
@@ -429,24 +392,20 @@ class NativeWrapperManagerServicer(manager_pb2_grpc.WrapperManagerServiceService
                 header=manager_pb2.ReplyHeader(code=-1, msg=str(e))
             )
 
-    # Implement other methods (License, WebPlayback) similarly...
-    # For now, return not implemented
+    # 其他方法（License、WebPlayback）后续按需实现
+    # 暂时返回未实现
 
     async def License(self, request, context):
-        """Not implemented."""
+        """未实现。"""
         context.abort(grpc.StatusCode.UNIMPLEMENTED, "License not implemented")
 
     async def WebPlayback(self, request, context):
-        """Not implemented."""
+        """未实现。"""
         context.abort(grpc.StatusCode.UNIMPLEMENTED, "WebPlayback not implemented")
 
 
 class NativeWrapperManagerServer:
-    """
-    Native wrapper manager gRPC server.
-
-    Main entry point for the Python-native wrapper-manager implementation.
-    """
+    """原生 wrapper 管理器 gRPC 服务器。"""
 
     def __init__(
         self,
@@ -456,25 +415,16 @@ class NativeWrapperManagerServer:
         enable_health_monitor: bool = True,
         health_check_interval: int = 30,
     ):
-        """
-        Initialize server.
-
-        Args:
-            host: Server host
-            port: Server port
-            proxy_config: Wrapper proxy configuration
-            enable_health_monitor: Enable health monitoring
-            health_check_interval: Health check interval in seconds
-        """
+        """初始化 gRPC 服务器。"""
         self.host = host
         self.port = port
 
-        # Initialize components
+        # 初始化组件
         self.instance_manager = InstanceManager(proxy_config)
         self.dispatcher = DecryptDispatcher(self.instance_manager)
         self.login_handler = LoginHandler(self.instance_manager)
 
-        # Health monitoring
+        # 健康监控
         self.health_monitor = HealthMonitor(
             instance_manager=self.instance_manager,
             check_interval=health_check_interval,
@@ -483,47 +433,47 @@ class NativeWrapperManagerServer:
             max_recovery_attempts=5,
         ) if enable_health_monitor else None
 
-        # Set up health monitor callbacks
+        # 注册健康监控回调
         if self.health_monitor:
             self.health_monitor.set_recovery_start_callback(self._on_recovery_start)
             self.health_monitor.set_recovery_complete_callback(self._on_recovery_complete)
 
-        # gRPC server
+        # gRPC 服务
         self._server: Optional[grpc.aio.Server] = None
         self._servicer: Optional[NativeWrapperManagerServicer] = None
 
     async def start(self):
-        """Start the gRPC server."""
+        """启动 gRPC 服务器。"""
         logger.info(f"Starting native wrapper-manager server on {self.host}:{self.port}")
 
-        # Create servicer
+        # 创建服务实现
         self._servicer = NativeWrapperManagerServicer(
             instance_manager=self.instance_manager,
             dispatcher=self.dispatcher,
             login_handler=self.login_handler
         )
 
-        # Create gRPC server
+        # 创建 gRPC 服务端
         self._server = grpc.aio.server()
 
-        # Add servicer
+        # 注册服务
         manager_pb2_grpc.add_WrapperManagerServiceServicer_to_server(
             self._servicer,
             self._server
         )
 
-        # Bind to address
+        # 绑定地址
         listen_addr = f"{self.host}:{self.port}"
         self._server.add_insecure_port(listen_addr)
 
-        # Start server
+        # 启动服务
         await self._server.start()
 
-        # Mark as ready
+        # 标记就绪
         if self._servicer:
             self._servicer.set_ready(True)
 
-        # Start health monitor
+        # 启动健康监控
         if self.health_monitor:
             await self.health_monitor.start()
             logger.info("Health monitor started")
@@ -531,10 +481,10 @@ class NativeWrapperManagerServer:
         logger.info(f"Native wrapper-manager server started on {listen_addr}")
 
     async def stop(self):
-        """Stop the gRPC server."""
+        """停止 gRPC 服务器。"""
         logger.info("Stopping native wrapper-manager server...")
 
-        # Stop health monitor
+        # 停止健康监控
         if self.health_monitor:
             await self.health_monitor.stop()
             logger.info("Health monitor stopped")
@@ -543,49 +493,32 @@ class NativeWrapperManagerServer:
             await self._server.stop(grace=5.0)
             logger.info("gRPC server stopped")
 
-        # Shutdown all instances
+        # 关闭全部实例
         await self.instance_manager.shutdown_all()
 
         logger.info("Native wrapper-manager server stopped")
 
     async def wait_for_termination(self):
-        """Wait for server termination."""
+        """等待服务终止。"""
         if self._server:
             await self._server.wait_for_termination()
 
     async def _on_recovery_start(self, action: RecoveryAction):
-        """
-        Callback for recovery start events.
-
-        Args:
-            action: Recovery action being performed
-        """
+        """恢复开始回调。"""
         logger.info(
             f"Recovery started for instance {action.instance_id}: "
             f"action={action.action_type}, reason={action.reason}"
         )
 
     async def _on_recovery_complete(self, instance_id: str, success: bool, message: str):
-        """
-        Callback for recovery completion events.
-
-        Args:
-            instance_id: Instance that was recovered
-            success: Whether recovery succeeded
-            message: Result message
-        """
+        """恢复完成回调。"""
         if success:
             logger.info(f"Recovery completed for instance {instance_id}: {message}")
         else:
             logger.error(f"Recovery failed for instance {instance_id}: {message}")
 
     def get_health_metrics(self) -> dict:
-        """
-        Get health metrics for all instances.
-
-        Returns:
-            Dict with health metrics
-        """
+        """获取所有实例健康指标。"""
         if not self.health_monitor:
             return {"error": "Health monitor not enabled"}
 

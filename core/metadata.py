@@ -1,8 +1,6 @@
 """
-Song Metadata Handler
-
-
-Handles parsing and formatting of song metadata for MP4 tagging.
+歌曲元数据处理器。
+用于解析与生成 MP4 标签。
 """
 
 from typing import Optional, Dict, List
@@ -14,7 +12,7 @@ from .models.song_data import SongDatum
 from .models.album_meta import AlbumMeta, Tracks
 
 
-# Fields not included in MP4 tags
+# 不写入 MP4 标签的字段
 NOT_INCLUDED_FIELD = [
     "playlistIndex",
     "bit_depth",
@@ -25,42 +23,34 @@ NOT_INCLUDED_FIELD = [
     "cover_url",
 ]
 
-# Mapping of metadata fields to MP4 tag atoms
+# 元数据字段与 MP4 标签原子映射
 TAG_MAPPING = {
-    "song_id": "cnID",  # iTunes Catalog ID
-    "title": "©nam",  # MP4 title
-    "artist": "©ART",  # MP4 artist
-    "album_id": "plID",  # iTunes Album ID
-    "album_artist": "aART",  # MP4 album artist
-    "album": "©alb",  # MP4 album
-    "album_created": "©day",  # MP4 YEAR tag
-    "composer": "©wrt",  # MP4 composer
-    "genre": "©gen",  # MP4 genre
-    "created": "purd",  # MP4 iTunes Purchase Date
-    "track": "©trk",  # MP4 track name
-    "tracknum": "trkn",  # MP4 total track number and current
-    "disk": "disk",  # MP4 disc number
-    "lyrics": "©lyr",  # MP4 unsynced lyrics
-    "cover": "covr",  # MP4 cover art atom
-    "copyright": "cprt",  # MP4 copyright
-    "record_company": "©pub",  # MP4 publisher
-    "upc": "----:com.apple.iTunes:BARCODE",  # MP4 barcode (UPC)
+    "song_id": "cnID",  # iTunes 目录 ID
+    "title": "©nam",  # MP4 标题
+    "artist": "©ART",  # MP4 艺术家
+    "album_id": "plID",  # iTunes 专辑 ID
+    "album_artist": "aART",  # MP4 专辑艺术家
+    "album": "©alb",  # MP4 专辑
+    "album_created": "©day",  # MP4 年份
+    "composer": "©wrt",  # MP4 作曲
+    "genre": "©gen",  # MP4 流派
+    "created": "purd",  # MP4 购买时间
+    "track": "©trk",  # MP4 曲名
+    "tracknum": "trkn",  # MP4 曲目编号/总数
+    "disk": "disk",  # MP4 碟号
+    "lyrics": "©lyr",  # MP4 非同步歌词
+    "cover": "covr",  # MP4 封面原子
+    "copyright": "cprt",  # MP4 版权
+    "record_company": "©pub",  # MP4 唱片公司
+    "upc": "----:com.apple.iTunes:BARCODE",  # MP4 UPC 条码
     "isrc": "----:com.apple.iTunes:ISRC",  # MP4 ISRC
-    "rtng": "rtng",  # MP4 advisory rating
-    "artist_id": "atID",  # iTunes Artist ID
+    "rtng": "rtng",  # MP4 分级
+    "artist_id": "atID",  # iTunes 艺术家 ID
 }
 
 
 def count_total_track_and_disc(tracks: Tracks) -> tuple[int, dict[int, int]]:
-    """
-    Count total tracks and discs from album tracks.
-
-    Args:
-        tracks: Album tracks data
-
-    Returns:
-        Tuple of (disc_count, track_count_per_disc)
-    """
+    """统计专辑碟数与每碟曲目数。"""
     disc_count = tracks.data[-1].attributes.discNumber if tracks.data else 1
     track_count: dict[int, int] = {}
 
@@ -74,12 +64,7 @@ def count_total_track_and_disc(tracks: Tracks) -> tuple[int, dict[int, int]]:
 
 
 class SongMetadata(BaseModel):
-    """
-    Song metadata container.
-
-    Holds all metadata fields for a song and provides methods
-    to convert to MP4 tag format.
-    """
+    """歌曲元数据容器。"""
 
     song_id: Optional[str] = None
     title: Optional[str] = None
@@ -113,15 +98,7 @@ class SongMetadata(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
     def to_mutagen_tags(self, embed_metadata: list[str]) -> dict:
-        """
-        Convert metadata to Mutagen MP4 tag format.
-
-        Args:
-            embed_metadata: List of fields to include
-
-        Returns:
-            Dictionary of MP4 tags
-        """
+        """转换为 Mutagen MP4 标签格式。"""
         tags = {}
 
         for key, value in self.model_dump().items():
@@ -134,7 +111,7 @@ class SongMetadata(BaseModel):
             if key in NOT_INCLUDED_FIELD:
                 continue
 
-            # Handle special cases
+            # 处理特殊字段
             if key == "lyrics":
                 tags[TAG_MAPPING[key]] = value
                 continue
@@ -187,15 +164,7 @@ class SongMetadata(BaseModel):
 
     @classmethod
     def parse_from_song_data(cls, song_data: SongDatum) -> "SongMetadata":
-        """
-        Parse metadata from Apple Music song data.
-
-        Args:
-            song_data: Song data from API
-
-        Returns:
-            SongMetadata instance
-        """
+        """从歌曲数据解析元数据。"""
         album_data = song_data.relationships.albums.data[0] if song_data.relationships.albums.data else None
         artist_data = song_data.relationships.artists.data[0] if song_data.relationships.artists.data else None
 
@@ -224,12 +193,7 @@ class SongMetadata(BaseModel):
         )
 
     def parse_from_album_data(self, album_data: AlbumMeta):
-        """
-        Update track totals from album data.
-
-        Args:
-            album_data: Album metadata from API
-        """
+        """根据专辑数据更新曲目统计。"""
         if album_data.data[0].relationships and album_data.data[0].relationships.tracks:
             self.disk_total, self.track_total = count_total_track_and_disc(
                 album_data.data[0].relationships.tracks
@@ -237,7 +201,7 @@ class SongMetadata(BaseModel):
 
     @staticmethod
     def _rating(content_rating: Optional[str]) -> int:
-        """Convert content rating string to numeric value."""
+        """将内容分级字符串转换为数值。"""
         if not content_rating:
             return 0
         if content_rating == "explicit":
@@ -247,19 +211,19 @@ class SongMetadata(BaseModel):
         return 0
 
     def set_lyrics(self, lyrics: str):
-        """Set the lyrics field."""
+        """设置歌词字段。"""
         self.lyrics = lyrics
 
     def set_cover(self, cover: bytes):
-        """Set the cover image data."""
+        """设置封面数据。"""
         self.cover = cover
 
     def set_playlist_index(self, index: int):
-        """Set the playlist index."""
+        """设置歌单序号。"""
         self.playlist_index = index
 
     def set_bit_depth_and_sample_rate(self, bit_depth: int, sample_rate: int):
-        """Set audio quality information."""
+        """设置音质信息。"""
         self.bit_depth = bit_depth
         self.sample_rate = sample_rate
         self.sample_rate_kHz = str(sample_rate / 1000)

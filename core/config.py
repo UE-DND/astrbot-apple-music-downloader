@@ -1,8 +1,6 @@
 """
-Configuration Management for Apple Music Downloader Plugin
-
-This module provides configuration management that bridges AstrBot's JSON Schema
-configuration with the internal configuration objects used by the downloader.
+Apple Music Downloader 插件配置管理。
+桥接 AstrBot 配置与内部配置对象。
 """
 
 from dataclasses import dataclass, field
@@ -12,15 +10,15 @@ from typing import Optional
 
 @dataclass
 class WrapperConfig:
-    """Wrapper service configuration."""
-    mode: str = "native"  # native, remote
+    """用于 Wrapper 的服务配置。"""
+    mode: str = "native"  # 本地/远程 模式
     url: str = "127.0.0.1:18923"
     secure: bool = False
 
 
 @dataclass
 class QueueConfig:
-    """Download queue configuration."""
+    """下载队列配置。"""
     max_queue_size: int = 10
     task_timeout: int = 300
     queue_timeout: int = 600
@@ -32,7 +30,7 @@ class QueueConfig:
 
 @dataclass
 class RegionConfig:
-    """Region and language configuration."""
+    """地区与语言配置。"""
     storefront: str = "cn"
     language: str = "zh-Hans-CN"
     language_warning: bool = True
@@ -40,7 +38,7 @@ class RegionConfig:
 
 @dataclass
 class DownloadConfig:
-    """Download settings configuration."""
+    """下载设置配置。"""
     default_quality: str = "alac"
     codec_priority: list[str] = field(default_factory=lambda: ["alac", "aac"])
     codec_alternative: bool = True
@@ -58,7 +56,7 @@ class DownloadConfig:
 
 @dataclass
 class MetadataConfig:
-    """Metadata embedding configuration."""
+    """元数据写入配置。"""
     embed_metadata: list[str] = field(default_factory=lambda: [
         "title", "artist", "album", "album_artist", "composer", "album_created",
         "genre", "created", "track", "tracknum", "disk", "lyrics", "cover",
@@ -68,7 +66,7 @@ class MetadataConfig:
 
 @dataclass
 class PathConfig:
-    """File path configuration."""
+    """文件路径配置。"""
     download_dir: str = "downloads"
     song_name_format: str = "{disk}-{tracknum:02d} {title}"
     dir_path_format: str = "{album_artist}/{album}"
@@ -78,7 +76,7 @@ class PathConfig:
 
 @dataclass
 class FileConfig:
-    """File management configuration."""
+    """文件管理配置。"""
     max_file_size_mb: int = 200
     send_cover: bool = True
     cleanup_interval_hours: int = 1
@@ -87,12 +85,7 @@ class FileConfig:
 
 @dataclass
 class PluginConfig:
-    """
-    Main plugin configuration container.
-
-    This class aggregates all configuration sections and provides
-    methods to load from AstrBot's plugin config dict.
-    """
+    """插件主配置容器。"""
     wrapper: WrapperConfig = field(default_factory=WrapperConfig)
     queue: QueueConfig = field(default_factory=QueueConfig)
     region: RegionConfig = field(default_factory=RegionConfig)
@@ -102,32 +95,23 @@ class PluginConfig:
     file: FileConfig = field(default_factory=FileConfig)
     debug_mode: bool = False
 
-    # Plugin directory (set at runtime)
+    # 插件目录（运行时设置）
     plugin_dir: Optional[Path] = None
 
     @classmethod
     def from_astrbot_config(cls, config: dict, plugin_dir: Optional[Path] = None) -> "PluginConfig":
-        """
-        Create a PluginConfig from AstrBot's configuration dictionary.
-
-        Args:
-            config: The configuration dictionary from AstrBot
-            plugin_dir: The plugin's directory path
-
-        Returns:
-            A populated PluginConfig instance
-        """
+        """从 AstrBot 配置字典构建 PluginConfig。"""
         instance = cls()
         instance.plugin_dir = plugin_dir
 
-        # Wrapper configuration
+        # Wrapper 配置
         instance.wrapper = WrapperConfig(
             mode=config.get("wrapper_mode", "native"),
             url=config.get("wrapper_url", "127.0.0.1:18923"),
             secure=config.get("wrapper_secure", False),
         )
 
-        # Queue configuration
+        # 队列配置
         queue_cfg = config.get("queue_config", {})
         instance.queue = QueueConfig(
             max_queue_size=queue_cfg.get("max_queue_size", 10),
@@ -139,7 +123,7 @@ class PluginConfig:
             max_tasks_per_user=queue_cfg.get("max_tasks_per_user", 2),
         )
 
-        # Region configuration
+        # 区域配置
         region_cfg = config.get("region_config", {})
         instance.region = RegionConfig(
             storefront=region_cfg.get("storefront", "cn"),
@@ -147,14 +131,14 @@ class PluginConfig:
             language_warning=region_cfg.get("language_warning", True),
         )
 
-        # Download configuration
+        # 下载配置
         download_cfg = config.get("download_config", {})
 
-        # Parse codec priority from comma-separated string
+        # 解析音质优先级（逗号分隔）
         codec_priority_str = download_cfg.get("codec_priority", "alac,aac")
         codec_priority = [c.strip() for c in codec_priority_str.split(",") if c.strip()]
 
-        # Parse lyrics extra from comma-separated string
+        # 解析歌词扩展（逗号分隔）
         lyrics_extra_str = download_cfg.get("lyrics_extra", "translation,pronunciation")
         lyrics_extra = [e.strip() for e in lyrics_extra_str.split(",") if e.strip()]
 
@@ -174,7 +158,7 @@ class PluginConfig:
             decrypt_timeout_seconds=download_cfg.get("decrypt_timeout_seconds", 600),
         )
 
-        # Metadata configuration
+        # 元数据配置
         metadata_cfg = config.get("metadata_config", {})
         embed_metadata_str = metadata_cfg.get(
             "embed_metadata",
@@ -183,7 +167,7 @@ class PluginConfig:
         embed_metadata = [m.strip() for m in embed_metadata_str.split(",") if m.strip()]
         instance.metadata = MetadataConfig(embed_metadata=embed_metadata)
 
-        # Path configuration
+        # 路径配置
         path_cfg = config.get("path_config", {})
         instance.path = PathConfig(
             download_dir=path_cfg.get("download_dir", "downloads"),
@@ -193,7 +177,7 @@ class PluginConfig:
             playlist_song_format=path_cfg.get("playlist_song_format", "{playlistSongIndex:02d}. {artist} - {title}"),
         )
 
-        # File configuration
+        # 文件配置
         file_cfg = config.get("file_config", {})
         instance.file = FileConfig(
             max_file_size_mb=file_cfg.get("max_file_size_mb", 200),
@@ -202,20 +186,20 @@ class PluginConfig:
             file_ttl_hours=file_cfg.get("file_ttl_hours", 24),
         )
 
-        # Debug mode
+        # 调试模式
         instance.debug_mode = config.get("debug_mode", False)
 
         return instance
 
     def get_download_path(self) -> Path:
-        """Get the absolute path to the download directory."""
+        """获取下载目录的绝对路径。"""
         download_dir = Path(self.path.download_dir)
         if not download_dir.is_absolute() and self.plugin_dir:
             download_dir = self.plugin_dir / download_dir
         return download_dir
 
     def get_assets_path(self) -> Path:
-        """Get the absolute path to the assets directory."""
+        """获取资源目录的绝对路径。"""
         if self.plugin_dir:
             return self.plugin_dir / "assets"
         return Path("assets")

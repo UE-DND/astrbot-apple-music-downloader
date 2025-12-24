@@ -1,8 +1,6 @@
 """
-Instance Manager
-
-Manages wrapper instances (accounts) with full lifecycle control.
-Each instance represents one Apple Music account with its own wrapper container.
+实例管理器。
+负责管理 wrapper 账户实例的生命周期。
 """
 
 import asyncio
@@ -18,7 +16,7 @@ from .wrapper_proxy import WrapperProxy, WrapperProxyConfig, create_instance_id
 
 
 class InstanceStatus(Enum):
-    """Instance status."""
+    """实例状态。"""
     INITIALIZING = "initializing"
     ACTIVE = "active"
     FAILED = "failed"
@@ -27,11 +25,7 @@ class InstanceStatus(Enum):
 
 @dataclass
 class WrapperInstance:
-    """
-    Wrapper instance data.
-
-    Represents one Apple Music account with its wrapper container.
-    """
+    """实例数据（Wrapper）。"""
     instance_id: str
     username: str
     region: str
@@ -39,38 +33,25 @@ class WrapperInstance:
     created_at: datetime = field(default_factory=datetime.now)
     last_used: datetime = field(default_factory=datetime.now)
     error: Optional[str] = None
-    no_restart: bool = False  # If True, don't restart on crash
+    no_restart: bool = False  # 为 True 时不自动重启
 
-    # Proxy to wrapper container
+    # 指向 wrapper 容器的代理
     proxy: Optional[WrapperProxy] = None
 
     def update_last_used(self):
-        """Update last used timestamp."""
+        """更新最近使用时间。"""
         self.last_used = datetime.now()
 
     def is_active(self) -> bool:
-        """Check if instance is active."""
+        """检查实例是否可用。"""
         return self.status == InstanceStatus.ACTIVE and self.proxy is not None
 
 
 class InstanceManager:
-    """
-    Manages wrapper instances.
-
-    Responsibilities:
-    - Add/remove instances
-    - Track instance lifecycle
-    - Provide instance lookup
-    - Monitor instance health
-    """
+    """实例管理器（Wrapper）。"""
 
     def __init__(self, proxy_config: Optional[WrapperProxyConfig] = None):
-        """
-        Initialize instance manager.
-
-        Args:
-            proxy_config: Default proxy configuration
-        """
+        """初始化实例管理器。"""
         self.proxy_config = proxy_config or WrapperProxyConfig()
         self._instances: Dict[str, WrapperInstance] = {}
         self._username_to_id: Dict[str, str] = {}
@@ -82,28 +63,18 @@ class InstanceManager:
         password: str,
         region: str = "us",
     ) -> Tuple[bool, str, Optional[WrapperInstance]]:
-        """
-        Add a new wrapper instance.
-
-        Args:
-            username: Apple Music username
-            password: Apple Music password
-            region: User's region/storefront
-
-        Returns:
-            Tuple of (success, message, instance)
-        """
+        """添加新的 wrapper 实例。"""
         async with self._lock:
-            # Generate instance ID
+            # 生成实例 ID
             instance_id = create_instance_id(username)
 
-            # Check if already exists
+            # 检查是否已存在
             if instance_id in self._instances:
                 existing = self._instances[instance_id]
                 return False, f"账户 {username} 已存在", existing
 
             try:
-                # Create wrapper proxy
+                # 创建 wrapper 代理
                 proxy = WrapperProxy(
                     instance_id=instance_id,
                     username=username,
@@ -111,10 +82,10 @@ class InstanceManager:
                     config=self.proxy_config,
                 )
 
-                # Start proxy
+                # 启动代理
                 await proxy.start()
 
-                # Create instance
+                # 创建实例
                 instance = WrapperInstance(
                     instance_id=instance_id,
                     username=username,
@@ -123,7 +94,7 @@ class InstanceManager:
                     proxy=proxy,
                 )
 
-                # Store instance
+                # 保存实例
                 self._instances[instance_id] = instance
                 self._username_to_id[username] = instance_id
 
@@ -135,15 +106,7 @@ class InstanceManager:
                 return False, f"添加账户失败: {str(e)}", None
 
     async def remove_instance(self, instance_id: str) -> Tuple[bool, str]:
-        """
-        Remove wrapper instance.
-
-        Args:
-            instance_id: Instance ID to remove
-
-        Returns:
-            Tuple of (success, message)
-        """
+        """移除 wrapper 实例。"""
         async with self._lock:
             if instance_id not in self._instances:
                 return False, "实例不存在"
@@ -151,11 +114,11 @@ class InstanceManager:
             try:
                 instance = self._instances[instance_id]
 
-                # Stop proxy
+                # 停止代理
                 if instance.proxy:
                     await instance.proxy.stop()
 
-                # Remove from tracking
+                # 移除追踪记录
                 del self._instances[instance_id]
                 if instance.username in self._username_to_id:
                     del self._username_to_id[instance.username]
@@ -168,48 +131,22 @@ class InstanceManager:
                 return False, f"移除账户失败: {str(e)}"
 
     def get_instance(self, instance_id: str) -> Optional[WrapperInstance]:
-        """
-        Get instance by ID.
-
-        Args:
-            instance_id: Instance ID
-
-        Returns:
-            WrapperInstance or None
-        """
+        """按 ID 获取实例。"""
         return self._instances.get(instance_id)
 
     def get_instance_by_username(self, username: str) -> Optional[WrapperInstance]:
-        """
-        Get instance by username.
-
-        Args:
-            username: Apple Music username
-
-        Returns:
-            WrapperInstance or None
-        """
+        """按用户名获取实例。"""
         instance_id = self._username_to_id.get(username)
         if instance_id:
             return self._instances.get(instance_id)
         return None
 
     def list_instances(self) -> List[WrapperInstance]:
-        """
-        List all instances.
-
-        Returns:
-            List of WrapperInstance
-        """
+        """列出全部实例。"""
         return list(self._instances.values())
 
     def get_regions(self) -> List[str]:
-        """
-        Get list of available regions.
-
-        Returns:
-            List of unique region codes
-        """
+        """获取可用地区列表。"""
         regions = set()
         for instance in self._instances.values():
             if instance.is_active():
@@ -217,21 +154,11 @@ class InstanceManager:
         return list(regions)
 
     def get_client_count(self) -> int:
-        """
-        Get count of active instances.
-
-        Returns:
-            Number of active instances
-        """
+        """获取活跃实例数量。"""
         return sum(1 for inst in self._instances.values() if inst.is_active())
 
     async def health_check_all(self) -> Dict[str, bool]:
-        """
-        Perform health check on all instances.
-
-        Returns:
-            Dict mapping instance_id to health status
-        """
+        """对所有实例执行健康检查。"""
         results = {}
         tasks = []
 
@@ -240,7 +167,7 @@ class InstanceManager:
                 task = instance.proxy.health_check()
                 tasks.append((instance_id, task))
 
-        # Run health checks concurrently
+        # 并发执行健康检查
         for instance_id, task in tasks:
             try:
                 healthy = await task
@@ -252,12 +179,7 @@ class InstanceManager:
         return results
 
     async def cleanup_inactive(self, max_idle_seconds: int = 3600):
-        """
-        Clean up instances that haven't been used recently.
-
-        Args:
-            max_idle_seconds: Maximum idle time in seconds
-        """
+        """清理长时间未使用的实例。"""
         now = datetime.now()
         to_remove = []
 
@@ -271,7 +193,7 @@ class InstanceManager:
             await self.remove_instance(instance_id)
 
     async def shutdown_all(self):
-        """Shutdown all instances."""
+        """关闭所有实例。"""
         logger.info("Shutting down all instances...")
         instance_ids = list(self._instances.keys())
 
@@ -281,4 +203,4 @@ class InstanceManager:
         logger.info("All instances shut down")
 
 
-from typing import Tuple  # Add missing import
+from typing import Tuple

@@ -1,44 +1,6 @@
 """
-Download Queue Module
-
-
-A modular, SOLID-compliant task queue implementation.
-
-Architecture:
-    - task.py: Task data class and state machine
-    - events.py: Event system (Observer pattern)
-    - stats.py: Statistics collector
-    - storage.py: Pure queue data structure
-    - processor.py: Task processing loop
-    - formatter.py: Output formatting
-
-Usage:
-    from services.queue import DownloadQueue, DownloadTask, TaskPriority
-
-    # Create queue with download function
-    queue = DownloadQueue(
-        max_size=20,
-        task_timeout=600,
-        download_fn=my_download_function,
-    )
-
-    # Register event handlers
-    queue.on_completed(handle_completed)
-    queue.on_failed(handle_failed)
-
-    # Start processing
-    await queue.start()
-
-    # Add task
-    success, message, task = await queue.enqueue(
-        url="https://music.apple.com/...",
-        quality="alac",
-        user_id="user123",
-        user_name="User",
-    )
-
-    # Stop processing
-    await queue.stop()
+下载队列模块。
+提供队列、事件、统计与处理器封装。
 """
 
 from __future__ import annotations
@@ -59,25 +21,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# Type aliases
 TaskEventHandler = Callable[[DownloadTask], Awaitable[None]]
 DownloadFunction = Callable[[DownloadTask], Awaitable["DownloadResult"]]
 
 
 class DownloadQueue:
-    """
-    Facade for the download queue system.
-
-    Provides a simplified interface to the underlying components:
-    - TaskQueue: Task storage and ordering
-    - TaskProcessor: Task execution
-    - QueueEventEmitter: Event notifications
-    - QueueStatsCollector: Statistics
-    - QueueFormatter: Output formatting
-
-    This class maintains API compatibility while internally using
-    the modular component architecture.
-    """
+    """下载队列系统门面。"""
 
     def __init__(
         self,
@@ -86,22 +35,12 @@ class DownloadQueue:
         download_fn: Optional[DownloadFunction] = None,
         formatter: Optional[QueueFormatter] = None,
     ):
-        """
-        Initialize the download queue.
-
-        Args:
-            max_size: Maximum queue size
-            task_timeout: Task timeout in seconds
-            download_fn: Function to execute downloads
-            formatter: Output formatter (default: ChineseFormatter)
-        """
-        # Components
+        """初始化下载队列。"""
         self._storage = TaskQueue(max_size=max_size)
         self._events = QueueEventEmitter()
         self._stats = QueueStatsCollector()
         self._formatter = formatter or default_formatter
 
-        # Processor (created when download_fn is set)
         self._processor: Optional[TaskProcessor] = None
         self._download_fn = download_fn
         self._task_timeout = task_timeout
@@ -109,11 +48,10 @@ class DownloadQueue:
         if download_fn:
             self._create_processor()
 
-        # Lock for thread-safe operations
         self._lock = asyncio.Lock()
 
     def _create_processor(self) -> None:
-        """Create the task processor."""
+        """创建任务处理器。"""
         if self._download_fn:
             self._processor = TaskProcessor(
                 queue=self._storage,
@@ -123,15 +61,9 @@ class DownloadQueue:
                 task_timeout=self._task_timeout,
             )
 
-    # ==================== Lifecycle ====================
 
     async def start(self) -> bool:
-        """
-        Start the queue processor.
-
-        Returns:
-            True if started, False if already running or no download function
-        """
+        """启动队列处理器。"""
         if not self._processor:
             logger.error("Cannot start queue: no download function configured")
             return False
@@ -139,31 +71,17 @@ class DownloadQueue:
         return await self._processor.start()
 
     async def stop(self, timeout: float = 30.0) -> bool:
-        """
-        Stop the queue processor.
-
-        Args:
-            timeout: Maximum time to wait for graceful shutdown
-
-        Returns:
-            True if stopped gracefully
-        """
+        """停止队列处理器。"""
         if not self._processor:
             return True
 
         return await self._processor.stop(timeout)
 
     def set_download_function(self, fn: DownloadFunction) -> None:
-        """
-        Set or update the download function.
-
-        Args:
-            fn: Async function to execute downloads
-        """
+        """设置或更新下载函数。"""
         self._download_fn = fn
         self._create_processor()
 
-    # ==================== Task Management ====================
 
     async def enqueue(
         self,
@@ -176,22 +94,7 @@ class DownloadQueue:
         song_name: Optional[str] = None,
         priority: TaskPriority = TaskPriority.NORMAL,
     ) -> tuple[bool, str, Optional[DownloadTask]]:
-        """
-        Add a task to the queue.
-
-        Args:
-            url: Download URL
-            quality: Quality setting
-            user_id: User ID
-            user_name: User display name
-            unified_msg_origin: Message origin for reply
-            quality_display: Human-readable quality name
-            song_name: Song name (optional)
-            priority: Task priority
-
-        Returns:
-            Tuple of (success, message, task)
-        """
+        """添加任务到队列。"""
         task = DownloadTask(
             url=url,
             quality=quality,
@@ -206,7 +109,6 @@ class DownloadQueue:
         success, message = await self._storage.push(task)
 
         if success:
-            # Emit enqueued event
             await self._events.emit(QueueEvent.TASK_ENQUEUED, task)
             logger.info(f"Task {task.task_id} enqueued: {message}")
             return True, message, task
@@ -215,28 +117,17 @@ class DownloadQueue:
             return False, message, None
 
     async def cancel_task(self, task_id: str) -> tuple[bool, str]:
-        """
-        Cancel a task by ID.
-
-        Args:
-            task_id: Task ID to cancel
-
-        Returns:
-            Tuple of (success, message)
-        """
-        # Check if it's the current task
+        """按 ID 取消任务。"""
         if (
             self._processor
             and self._processor.current_task
             and self._processor.current_task.task_id == task_id
         ):
-            # Request cancellation of current task
             success = await self._processor.cancel_current()
             if success:
                 return True, "正在取消当前任务"
             return False, "无法取消正在处理的任务"
 
-        # Try to remove from queue
         task = await self._storage.remove(task_id)
         if task:
             task.try_transition_to(TaskStatus.CANCELLED)
@@ -247,15 +138,7 @@ class DownloadQueue:
         return False, f"未找到任务 {task_id}"
 
     async def cancel_user_tasks(self, user_id: str) -> tuple[int, str]:
-        """
-        Cancel all tasks for a user.
-
-        Args:
-            user_id: User ID
-
-        Returns:
-            Tuple of (cancelled_count, message)
-        """
+        """取消用户的全部任务。"""
         removed = await self._storage.remove_user_tasks(user_id)
 
         for task in removed:
@@ -268,94 +151,91 @@ class DownloadQueue:
             return count, f"已取消 {count} 个任务"
         return 0, "没有找到该用户的任务"
 
-    # ==================== Query Methods ====================
 
     def get_task(self, task_id: str) -> Optional[DownloadTask]:
-        """Get task by ID."""
+        """按 ID 获取任务。"""
         return self._storage.get(task_id)
 
     def get_user_tasks(self, user_id: str) -> List[DownloadTask]:
-        """Get all tasks for a user."""
+        """获取用户的全部任务。"""
         return self._storage.get_user_tasks(user_id)
 
     def get_position(self, task_id: str) -> int:
-        """Get task position in queue (1-based)."""
+        """获取任务在队列中的位置（从 1 开始）。"""
         return self._storage.get_position(task_id)
 
     def has_duplicate(self, user_id: str, url: str) -> bool:
-        """Check if user has duplicate pending task."""
+        """检查用户是否有重复待处理任务。"""
         return self._storage.has_duplicate(user_id, url)
 
     def list_tasks(self, limit: Optional[int] = None) -> List[DownloadTask]:
-        """Get list of pending tasks."""
+        """获取待处理任务列表。"""
         return self._storage.list_tasks(limit)
 
     @property
     def current_task(self) -> Optional[DownloadTask]:
-        """Get currently processing task."""
+        """获取当前处理中的任务。"""
         if self._processor:
             return self._processor.current_task
         return None
 
     @property
     def is_empty(self) -> bool:
-        """Check if queue is empty."""
+        """检查队列是否为空。"""
         return self._storage.is_empty
 
     @property
     def is_full(self) -> bool:
-        """Check if queue is full."""
+        """检查队列是否已满。"""
         return self._storage.is_full
 
     @property
     def size(self) -> int:
-        """Get current queue size."""
+        """获取当前队列大小。"""
         return len(self._storage)
 
     @property
     def max_size(self) -> int:
-        """Get maximum queue size."""
+        """获取队列最大容量。"""
         return self._storage.max_size
 
     @property
     def is_running(self) -> bool:
-        """Check if processor is running."""
+        """检查处理器是否在运行。"""
         return self._processor.is_running if self._processor else False
 
-    # ==================== Event Registration ====================
 
     def on_enqueued(self, handler: TaskEventHandler) -> EventSubscription:
-        """Register handler for task enqueued event."""
+        """注册任务入队事件处理器。"""
         return self._events.on(QueueEvent.TASK_ENQUEUED, handler)
 
     def on_started(self, handler: TaskEventHandler) -> EventSubscription:
-        """Register handler for task started event."""
+        """注册任务开始事件处理器。"""
         return self._events.on(QueueEvent.TASK_STARTED, handler)
 
     def on_completed(self, handler: TaskEventHandler) -> EventSubscription:
-        """Register handler for task completed event."""
+        """注册任务完成事件处理器。"""
         return self._events.on(QueueEvent.TASK_COMPLETED, handler)
 
     def on_failed(self, handler: TaskEventHandler) -> EventSubscription:
-        """Register handler for task failed event."""
+        """注册任务失败事件处理器。"""
         return self._events.on(QueueEvent.TASK_FAILED, handler)
 
     def on_cancelled(self, handler: TaskEventHandler) -> EventSubscription:
-        """Register handler for task cancelled event."""
+        """注册任务取消事件处理器。"""
         return self._events.on(QueueEvent.TASK_CANCELLED, handler)
 
     def on_timeout(self, handler: TaskEventHandler) -> EventSubscription:
-        """Register handler for task timeout event."""
+        """注册任务超时事件处理器。"""
         return self._events.on(QueueEvent.TASK_TIMEOUT, handler)
 
     def off(self, event: QueueEvent, handler: Optional[TaskEventHandler] = None) -> int:
-        """Remove event handler(s)."""
+        """移除事件处理器。"""
         return self._events.off(event, handler)
 
-    # ==================== Statistics ====================
 
     def get_stats(self) -> QueueStats:
-        """Get queue statistics."""
+        """获取队列统计信息。"""
         return self._stats.get_stats(
             pending_count=len(self._storage),
             processing_count=1 if self.current_task else 0,
@@ -363,10 +243,9 @@ class DownloadQueue:
             max_queue_size=self._storage.max_size,
         )
 
-    # ==================== Formatted Output ====================
 
     def format_queue_status(self) -> str:
-        """Get formatted queue status."""
+        """获取格式化队列状态。"""
         return self._formatter.format_queue_status(
             tasks=self.list_tasks(),
             current_task=self.current_task,
@@ -374,7 +253,7 @@ class DownloadQueue:
         )
 
     def format_task_info(self, task_id: str) -> str:
-        """Get formatted task information."""
+        """获取格式化任务信息。"""
         task = self.get_task(task_id)
         if not task:
             return f"未找到任务 {task_id}"
@@ -383,14 +262,13 @@ class DownloadQueue:
         return self._formatter.format_task_info(task, position)
 
     def format_user_tasks(self, user_id: str, user_name: str = "") -> str:
-        """Get formatted user tasks."""
+        """获取格式化用户任务列表。"""
         tasks = self.get_user_tasks(user_id)
         return self._formatter.format_user_tasks(tasks, user_name or user_id)
 
-    # ==================== Utilities ====================
 
     async def clear(self) -> int:
-        """Clear all tasks from queue."""
+        """清空队列任务。"""
         return await self._storage.clear()
 
     def __repr__(self) -> str:
@@ -398,37 +276,23 @@ class DownloadQueue:
         return f"DownloadQueue(size={self.size}/{self.max_size}, status={running})"
 
 
-# Module exports
 __all__ = [
-    # Main class
     "DownloadQueue",
-
-    # Task
     "DownloadTask",
     "TaskStatus",
     "TaskPriority",
     "TaskStateMachine",
-
-    # Events
     "QueueEvent",
     "QueueEventEmitter",
     "TaskEventAdapter",
     "EventSubscription",
-
-    # Stats
     "QueueStats",
     "QueueStatsCollector",
     "TaskTiming",
-
-    # Storage
     "TaskQueue",
     "PriorityStrategy",
     "FIFOWithPriorityStrategy",
-
-    # Processor
     "TaskProcessor",
-
-    # Formatter
     "QueueFormatter",
     "ChineseFormatter",
     "MinimalFormatter",

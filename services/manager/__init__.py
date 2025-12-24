@@ -1,15 +1,6 @@
 """
-Python Native Wrapper Manager
-
-This module provides a Python-native implementation of the wrapper-manager gRPC service.
-It manages multiple wrapper instances and provides decryption services without Docker dependency.
-
-Architecture:
-- gRPC Server: Implements the WrapperManagerService protocol
-- Instance Manager: Manages wrapper instances (accounts)
-- Decrypt Dispatcher: Routes decryption tasks to appropriate instances
-- Wrapper Proxy: Proxies requests to Docker wrapper containers
-- Health Monitor: Monitors instance health and performs automatic recovery
+原生 Python wrapper 管理器。
+提供实例管理、解密调度与健康监控能力。
 """
 
 from .grpc_server import NativeWrapperManagerServer

@@ -1,4 +1,4 @@
-"""Playlist info model."""
+"""歌单信息模型。"""
 from __future__ import annotations
 
 from typing import List, Optional

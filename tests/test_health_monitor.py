@@ -1,7 +1,6 @@
 """
-Unit Tests for Health Monitor
-
-Tests health checking, failure detection, and automatic recovery.
+健康监控单元测试。
+覆盖健康检查、失败检测与自动恢复。
 """
 
 import asyncio
@@ -12,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import sys
 from pathlib import Path
 
-# Add project root to path
+# 将项目根目录加入路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -29,16 +28,16 @@ from services.manager import (
 
 @pytest.fixture
 def instance_manager():
-    """Create instance manager fixture."""
+    """创建实例管理器夹具。"""
     return InstanceManager(WrapperProxyConfig())
 
 
 @pytest.fixture
 def health_monitor(instance_manager):
-    """Create health monitor fixture."""
+    """创建健康监控夹具。"""
     return HealthMonitor(
         instance_manager=instance_manager,
-        check_interval=1,  # Short interval for testing
+        check_interval=1,  # 测试用短间隔
         failure_threshold=2,
         recovery_enabled=True,
         max_recovery_attempts=3,
@@ -47,7 +46,7 @@ def health_monitor(instance_manager):
 
 @pytest.mark.asyncio
 async def test_health_monitor_initialization(health_monitor):
-    """Test health monitor initialization."""
+    """测试健康监控初始化。"""
     assert health_monitor.check_interval == 1
     assert health_monitor.failure_threshold == 2
     assert health_monitor.recovery_enabled is True
@@ -57,21 +56,21 @@ async def test_health_monitor_initialization(health_monitor):
 
 @pytest.mark.asyncio
 async def test_health_monitor_start_stop(health_monitor):
-    """Test starting and stopping health monitor."""
-    # Start monitor
+    """测试健康监控启动与停止。"""
+    # 启动监控
     await health_monitor.start()
     assert health_monitor._running is True
     assert health_monitor._monitor_task is not None
 
-    # Stop monitor
+    # 停止监控
     await health_monitor.stop()
     assert health_monitor._running is False
 
 
 @pytest.mark.asyncio
 async def test_health_check_healthy_instance(instance_manager, health_monitor):
-    """Test health check on healthy instance."""
-    # Create mock instance with healthy proxy
+    """测试健康实例的健康检查。"""
+    # 创建健康代理的模拟实例
     instance = WrapperInstance(
         instance_id="test-instance",
         username="test@example.com",
@@ -79,13 +78,13 @@ async def test_health_check_healthy_instance(instance_manager, health_monitor):
         status=InstanceStatus.ACTIVE,
     )
 
-    # Mock proxy
+    # 模拟代理
     instance.proxy = AsyncMock(spec=WrapperProxy)
     instance.proxy.health_check = AsyncMock(return_value=True)
 
     instance_manager._instances["test-instance"] = instance
 
-    # Perform health check
+    # 执行健康检查
     result = await health_monitor._check_instance_health(instance)
 
     assert result.instance_id == "test-instance"
@@ -97,8 +96,8 @@ async def test_health_check_healthy_instance(instance_manager, health_monitor):
 
 @pytest.mark.asyncio
 async def test_health_check_unhealthy_instance(instance_manager, health_monitor):
-    """Test health check on unhealthy instance."""
-    # Create mock instance with unhealthy proxy
+    """测试不健康实例的健康检查。"""
+    # 创建不健康代理的模拟实例
     instance = WrapperInstance(
         instance_id="test-instance",
         username="test@example.com",
@@ -106,13 +105,13 @@ async def test_health_check_unhealthy_instance(instance_manager, health_monitor)
         status=InstanceStatus.ACTIVE,
     )
 
-    # Mock proxy that returns False
+    # 模拟返回 False 的代理
     instance.proxy = AsyncMock(spec=WrapperProxy)
     instance.proxy.health_check = AsyncMock(return_value=False)
 
     instance_manager._instances["test-instance"] = instance
 
-    # Perform health check
+    # 执行健康检查
     result = await health_monitor._check_instance_health(instance)
 
     assert result.instance_id == "test-instance"
@@ -123,8 +122,8 @@ async def test_health_check_unhealthy_instance(instance_manager, health_monitor)
 
 @pytest.mark.asyncio
 async def test_health_check_timeout(instance_manager, health_monitor):
-    """Test health check timeout."""
-    # Create mock instance with slow proxy
+    """测试健康检查超时。"""
+    # 创建慢速代理的模拟实例
     instance = WrapperInstance(
         instance_id="test-instance",
         username="test@example.com",
@@ -132,9 +131,9 @@ async def test_health_check_timeout(instance_manager, health_monitor):
         status=InstanceStatus.ACTIVE,
     )
 
-    # Mock proxy that times out
+    # 模拟超时代理
     async def slow_health_check():
-        await asyncio.sleep(10)  # Longer than timeout
+        await asyncio.sleep(10)  # 超过超时阈值
         return True
 
     instance.proxy = AsyncMock(spec=WrapperProxy)
@@ -142,7 +141,7 @@ async def test_health_check_timeout(instance_manager, health_monitor):
 
     instance_manager._instances["test-instance"] = instance
 
-    # Perform health check
+    # 执行健康检查
     result = await health_monitor._check_instance_health(instance)
 
     assert result.instance_id == "test-instance"
@@ -153,7 +152,7 @@ async def test_health_check_timeout(instance_manager, health_monitor):
 
 @pytest.mark.asyncio
 async def test_consecutive_failure_tracking(instance_manager, health_monitor):
-    """Test tracking of consecutive failures."""
+    """测试连续失败计数。"""
     instance = WrapperInstance(
         instance_id="test-instance",
         username="test@example.com",
@@ -166,20 +165,20 @@ async def test_consecutive_failure_tracking(instance_manager, health_monitor):
 
     instance_manager._instances["test-instance"] = instance
 
-    # Perform multiple health checks
+    # 执行多次健康检查
     for i in range(3):
         result = await health_monitor._check_instance_health(instance)
         await health_monitor._process_health_result(result)
 
-    # Check consecutive failures
+    # 检查连续失败次数
     failures = health_monitor._get_consecutive_failures("test-instance")
     assert failures == 3
 
 
 @pytest.mark.asyncio
 async def test_recovery_trigger(instance_manager, health_monitor):
-    """Test automatic recovery trigger."""
-    # Create unhealthy instance
+    """测试自动恢复触发。"""
+    # 创建不健康实例
     instance = WrapperInstance(
         instance_id="test-instance",
         username="test@example.com",
@@ -196,7 +195,7 @@ async def test_recovery_trigger(instance_manager, health_monitor):
 
     health_monitor._perform_recovery = AsyncMock(return_value=(True, "ok"))
 
-    # Mock recovery callbacks
+    # 模拟恢复回调
     recovery_start_called = False
     recovery_complete_called = False
 
@@ -211,22 +210,22 @@ async def test_recovery_trigger(instance_manager, health_monitor):
     health_monitor.set_recovery_start_callback(on_recovery_start)
     health_monitor.set_recovery_complete_callback(on_recovery_complete)
 
-    # Trigger failures
+    # 触发失败
     for i in range(3):
         result = await health_monitor._check_instance_health(instance)
         await health_monitor._process_health_result(result)
 
-    # Wait for recovery
+    # 等待恢复
     await asyncio.sleep(0.1)
 
-    # Check callbacks were called
+    # 检查回调被调用
     assert recovery_start_called
     assert recovery_complete_called
 
 
 @pytest.mark.asyncio
 async def test_recovery_exponential_backoff(instance_manager, health_monitor):
-    """Test exponential backoff for recovery attempts."""
+    """测试恢复重试指数退避。"""
     instance = WrapperInstance(
         instance_id="test-instance",
         username="test@example.com",
@@ -241,23 +240,23 @@ async def test_recovery_exponential_backoff(instance_manager, health_monitor):
 
     instance_manager._instances["test-instance"] = instance
 
-    # First recovery
+    # 第一次恢复
     health_monitor._recovery_attempts["test-instance"] = 1
     health_monitor._last_recovery["test-instance"] = datetime.now() - timedelta(seconds=1)
 
-    # Try to trigger recovery immediately (should be blocked by backoff)
+    # 立即触发恢复（应被退避阻止）
     result = await health_monitor._check_instance_health(instance)
-    result.consecutive_failures = 3  # Force trigger threshold
+    result.consecutive_failures = 3  # 强制触发阈值
 
     await health_monitor._trigger_recovery(result)
 
-    # Should not increase attempts due to backoff
+    # 退避期间不应增加次数
     assert health_monitor._recovery_attempts["test-instance"] == 1
 
 
 @pytest.mark.asyncio
 async def test_max_recovery_attempts(instance_manager, health_monitor):
-    """Test maximum recovery attempts limit."""
+    """测试最大恢复次数限制。"""
     instance = WrapperInstance(
         instance_id="test-instance",
         username="test@example.com",
@@ -272,22 +271,22 @@ async def test_max_recovery_attempts(instance_manager, health_monitor):
 
     instance_manager._instances["test-instance"] = instance
 
-    # Set to max attempts
-    health_monitor._recovery_attempts["test-instance"] = 3  # max_recovery_attempts
+    # 设置为最大次数
+    health_monitor._recovery_attempts["test-instance"] = 3  # 最大恢复次数
 
     result = await health_monitor._check_instance_health(instance)
     result.consecutive_failures = 3
 
     await health_monitor._trigger_recovery(result)
 
-    # Instance should be marked as failed
+    # 实例应标记为失败
     assert instance.status == InstanceStatus.FAILED
     assert instance.no_restart is True
 
 
 @pytest.mark.asyncio
 async def test_health_metrics(instance_manager, health_monitor):
-    """Test health metrics collection."""
+    """测试健康指标采集。"""
     instance = WrapperInstance(
         instance_id="test-instance",
         username="test@example.com",
@@ -300,12 +299,12 @@ async def test_health_metrics(instance_manager, health_monitor):
 
     instance_manager._instances["test-instance"] = instance
 
-    # Perform multiple checks
+    # 执行多次检查
     for _ in range(5):
         result = await health_monitor._check_instance_health(instance)
         await health_monitor._process_health_result(result)
 
-    # Get metrics
+    # 获取指标
     metrics = health_monitor.get_health_metrics("test-instance")
 
     assert metrics["total_checks"] == 5
@@ -317,8 +316,8 @@ async def test_health_metrics(instance_manager, health_monitor):
 
 @pytest.mark.asyncio
 async def test_get_all_metrics(instance_manager, health_monitor):
-    """Test getting metrics for all instances."""
-    # Create multiple instances
+    """测试获取全部实例指标。"""
+    # 创建多个实例
     for i in range(3):
         instance = WrapperInstance(
             instance_id=f"test-instance-{i}",
@@ -330,11 +329,11 @@ async def test_get_all_metrics(instance_manager, health_monitor):
         instance.proxy.health_check = AsyncMock(return_value=True)
         instance_manager._instances[f"test-instance-{i}"] = instance
 
-        # Perform health check
+        # 执行健康检查
         result = await health_monitor._check_instance_health(instance)
         await health_monitor._process_health_result(result)
 
-    # Get all metrics
+    # 获取全部指标
     all_metrics = health_monitor.get_all_metrics()
 
     assert len(all_metrics) == 3
@@ -345,7 +344,7 @@ async def test_get_all_metrics(instance_manager, health_monitor):
 
 @pytest.mark.asyncio
 async def test_health_status_persistence(instance_manager, health_monitor):
-    """Test that health status is persisted across checks."""
+    """测试健康状态跨检查的持久性。"""
     instance = WrapperInstance(
         instance_id="test-instance",
         username="test@example.com",
@@ -358,19 +357,19 @@ async def test_health_status_persistence(instance_manager, health_monitor):
 
     instance_manager._instances["test-instance"] = instance
 
-    # Perform first check
+    # 执行第一次检查
     result1 = await health_monitor._check_instance_health(instance)
     await health_monitor._process_health_result(result1)
 
-    # Get status
+    # 获取状态
     status = health_monitor.get_health_status("test-instance")
     assert status == HealthStatus.HEALTHY
 
-    # Perform second check
+    # 执行第二次检查
     result2 = await health_monitor._check_instance_health(instance)
     await health_monitor._process_health_result(result2)
 
-    # Status should still be healthy
+    # 状态应保持健康
     status = health_monitor.get_health_status("test-instance")
     assert status == HealthStatus.HEALTHY
 

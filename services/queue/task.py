@@ -1,11 +1,6 @@
 """
-Download Task and State Machine
-
-
-Implements:
-- DownloadTask: Immutable task data container
-- TaskStatus: Task lifecycle states
-- TaskStateMachine: Ensures valid state transitions
+下载任务与状态机。
+包含任务数据与状态流转规则。
 """
 
 from __future__ import annotations
@@ -18,7 +13,7 @@ from typing import Optional, Any, Set, FrozenSet
 
 
 class TaskStatus(Enum):
-    """Task lifecycle states."""
+    """任务生命周期状态。"""
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -28,7 +23,7 @@ class TaskStatus(Enum):
 
     @property
     def is_terminal(self) -> bool:
-        """Check if this is a terminal state."""
+        """判断是否为终态。"""
         return self in (
             TaskStatus.COMPLETED,
             TaskStatus.FAILED,
@@ -38,12 +33,12 @@ class TaskStatus(Enum):
 
     @property
     def is_active(self) -> bool:
-        """Check if task is still active."""
+        """判断任务是否仍处于活跃状态。"""
         return self in (TaskStatus.PENDING, TaskStatus.PROCESSING)
 
 
 class TaskPriority(Enum):
-    """Task priority levels."""
+    """任务优先级。"""
     LOW = 0
     NORMAL = 1
     HIGH = 2
@@ -51,19 +46,8 @@ class TaskPriority(Enum):
 
 
 class TaskStateMachine:
-    """
-    Ensures valid state transitions for tasks.
+    """任务状态流转校验器。"""
 
-    State Diagram:
-        PENDING -> PROCESSING -> COMPLETED
-                             -> FAILED
-                             -> TIMEOUT
-                             -> CANCELLED
-        PENDING -> CANCELLED
-        PENDING -> TIMEOUT
-    """
-
-    # Valid transitions: from_state -> {allowed_to_states}
     _TRANSITIONS: dict[TaskStatus, FrozenSet[TaskStatus]] = {
         TaskStatus.PENDING: frozenset({
             TaskStatus.PROCESSING,
@@ -76,7 +60,6 @@ class TaskStateMachine:
             TaskStatus.TIMEOUT,
             TaskStatus.CANCELLED,
         }),
-        # Terminal states have no valid transitions
         TaskStatus.COMPLETED: frozenset(),
         TaskStatus.FAILED: frozenset(),
         TaskStatus.CANCELLED: frozenset(),
@@ -85,13 +68,13 @@ class TaskStateMachine:
 
     @classmethod
     def can_transition(cls, from_status: TaskStatus, to_status: TaskStatus) -> bool:
-        """Check if transition is valid."""
+        """检查状态流转是否合法。"""
         allowed = cls._TRANSITIONS.get(from_status, frozenset())
         return to_status in allowed
 
     @classmethod
     def validate_transition(cls, from_status: TaskStatus, to_status: TaskStatus) -> None:
-        """Validate transition, raise if invalid."""
+        """校验状态流转，非法则抛错。"""
         if not cls.can_transition(from_status, to_status):
             raise InvalidStateTransitionError(
                 f"Invalid state transition: {from_status.value} -> {to_status.value}"
@@ -99,109 +82,78 @@ class TaskStateMachine:
 
     @classmethod
     def get_allowed_transitions(cls, status: TaskStatus) -> FrozenSet[TaskStatus]:
-        """Get all allowed transitions from a status."""
+        """获取指定状态允许的流转集合。"""
         return cls._TRANSITIONS.get(status, frozenset())
 
 
 class InvalidStateTransitionError(Exception):
-    """Raised when attempting an invalid state transition."""
+    """状态流转非法时抛出。"""
     pass
 
 
 @dataclass
 class DownloadTask:
-    """
-    Download task data container.
+    """下载任务数据容器。"""
 
-    Responsibilities:
-    - Hold task data (immutable after creation except status)
-    - Track timing information
-    - Provide serialization for display
-
-    Note: Status transitions should go through TaskStateMachine.
-    """
-
-    # Unique identifier
     task_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
 
-    # Download parameters
     url: str = ""
     quality: str = "alac"
     quality_display: str = ""
 
-    # User information
     user_id: str = ""
     user_name: str = ""
     unified_msg_origin: str = ""
 
-    # Metadata (optional, fetched before download)
     song_name: Optional[str] = None
 
-    # Task configuration
     priority: TaskPriority = TaskPriority.NORMAL
 
-    # State tracking (managed by TaskStateMachine)
     _status: TaskStatus = field(default=TaskStatus.PENDING, repr=False)
 
-    # Timing
     created_at: float = field(default_factory=time.time)
     started_at: Optional[float] = None
     completed_at: Optional[float] = None
 
-    # Result
     result: Optional[Any] = field(default=None, repr=False)
     error: Optional[str] = None
 
-    # Internal: Future for await support
     _future: Optional[asyncio.Future] = field(default=None, repr=False, compare=False)
 
-    # ==================== Status Management ====================
 
     @property
     def status(self) -> TaskStatus:
-        """Get current status."""
+        """获取当前状态。"""
         return self._status
 
     def transition_to(self, new_status: TaskStatus) -> None:
-        """
-        Transition to a new status with validation.
-
-        Raises:
-            InvalidStateTransitionError: If transition is not allowed.
-        """
+        """校验后切换到新状态。"""
         TaskStateMachine.validate_transition(self._status, new_status)
         self._status = new_status
 
-        # Update timing based on new status
         if new_status == TaskStatus.PROCESSING:
             self.started_at = time.time()
         elif new_status.is_terminal:
             self.completed_at = time.time()
 
     def try_transition_to(self, new_status: TaskStatus) -> bool:
-        """
-        Try to transition to a new status.
-
-        Returns:
-            True if transition succeeded, False otherwise.
-        """
+        """尝试切换状态，成功返回 True。"""
         if TaskStateMachine.can_transition(self._status, new_status):
             self.transition_to(new_status)
             return True
         return False
 
-    # ==================== Timing Properties ====================
 
     @property
     def wait_time(self) -> float:
-        """Time spent waiting in queue (seconds)."""
+        """队列等待时长（秒）。"""
         if self.started_at:
             return self.started_at - self.created_at
         return time.time() - self.created_at
 
     @property
     def process_time(self) -> float:
-        """Time spent processing (seconds)."""
+        """处理时长（秒）。"""
         if not self.started_at:
             return 0.0
         end_time = self.completed_at or time.time()
@@ -209,12 +161,11 @@ class DownloadTask:
 
     @property
     def total_time(self) -> float:
-        """Total time from creation to completion (seconds)."""
+        """从创建到完成的总时长（秒）。"""
         if not self.completed_at:
             return time.time() - self.created_at
         return self.completed_at - self.created_at
 
-    # ==================== Convenience Properties ====================
 
     @property
     def is_pending(self) -> bool:
@@ -244,13 +195,9 @@ class DownloadTask:
     def is_active(self) -> bool:
         return self._status.is_active
 
-    # ==================== Comparison (for priority queue) ====================
 
     def __lt__(self, other: DownloadTask) -> bool:
-        """
-        Compare for priority queue sorting.
-        Higher priority first, then earlier creation time.
-        """
+        """用于优先队列排序。"""
         if self.priority.value != other.priority.value:
             return self.priority.value > other.priority.value
         return self.created_at < other.created_at
@@ -263,10 +210,9 @@ class DownloadTask:
     def __hash__(self) -> int:
         return hash(self.task_id)
 
-    # ==================== Serialization ====================
 
     def to_dict(self) -> dict:
-        """Convert to dictionary for display/API."""
+        """转换为字典供展示/API 使用。"""
         return {
             "task_id": self.task_id,
             "url": self._truncate_url(self.url),
@@ -287,7 +233,7 @@ class DownloadTask:
 
     @staticmethod
     def _truncate_url(url: str, max_length: int = 50) -> str:
-        """Truncate URL for display."""
+        """截断 URL 便于显示。"""
         if len(url) <= max_length:
             return url
         return url[:max_length - 3] + "..."

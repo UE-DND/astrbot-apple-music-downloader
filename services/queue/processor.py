@@ -1,12 +1,6 @@
 """
-Task Processor for Download Queue
-
-
-Manages the task processing loop with:
-- Lifecycle management (start/stop)
-- Task execution with timeout
-- Event emission
-- Statistics collection
+下载队列任务处理器。
+负责任务生命周期、超时与事件统计。
 """
 
 from __future__ import annotations
@@ -24,43 +18,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Enable debug logging
 import sys
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 logger.setLevel(logging.DEBUG)
 
-
-# Type alias for the download function
 DownloadFunction = Callable[[DownloadTask], Awaitable["DownloadResult"]]
 
 
 class TaskProcessor:
-    """
-    Processes tasks from the queue.
-
-    Single responsibility: manage task execution lifecycle.
-
-    Features:
-    - Configurable concurrency
-    - Task timeout handling
-    - Event-driven callbacks
-    - Statistics collection
-    - Graceful shutdown
-
-    Usage:
-        processor = TaskProcessor(
-            queue=task_queue,
-            download_fn=downloader.download,
-            events=event_emitter,
-            stats=stats_collector
-        )
-
-        # Start processing
-        await processor.start()
-
-        # Stop processing
-        await processor.stop()
-    """
+    """处理队列任务的执行循环。"""
 
     def __init__(
         self,
@@ -68,22 +34,11 @@ class TaskProcessor:
         download_fn: DownloadFunction,
         events: QueueEventEmitter,
         stats: QueueStatsCollector,
-        task_timeout: float = 600.0,  # 10 minutes default
+        task_timeout: float = 600.0,  # 默认 10 分钟
         poll_interval: float = 1.0,
         max_retries: int = 0,
     ):
-        """
-        Initialize the task processor.
-
-        Args:
-            queue: Task queue to process from
-            download_fn: Async function to execute downloads
-            events: Event emitter for notifications
-            stats: Statistics collector
-            task_timeout: Maximum time for a single task (seconds)
-            poll_interval: Interval between queue polls (seconds)
-            max_retries: Maximum retry attempts for failed tasks
-        """
+        """初始化任务处理器。"""
         self._queue = queue
         self._download_fn = download_fn
         self._events = events
@@ -92,33 +47,25 @@ class TaskProcessor:
         self._poll_interval = poll_interval
         self._max_retries = max_retries
 
-        # State
         self._running = False
         self._current_task: Optional[DownloadTask] = None
         self._processor_task: Optional[asyncio.Task] = None
 
-        # Lock for state changes
         self._lock = asyncio.Lock()
 
-    # ==================== Lifecycle ====================
 
     @property
     def is_running(self) -> bool:
-        """Check if processor is running."""
+        """检查处理器是否运行中。"""
         return self._running
 
     @property
     def current_task(self) -> Optional[DownloadTask]:
-        """Get the currently processing task."""
+        """获取当前处理中的任务。"""
         return self._current_task
 
     async def start(self) -> bool:
-        """
-        Start the processor loop.
-
-        Returns:
-            True if started, False if already running
-        """
+        """启动处理器循环。"""
         async with self._lock:
             if self._running:
                 logger.warning("Processor already running")
@@ -135,15 +82,7 @@ class TaskProcessor:
             return True
 
     async def stop(self, timeout: float = 30.0) -> bool:
-        """
-        Stop the processor loop.
-
-        Args:
-            timeout: Maximum time to wait for graceful shutdown
-
-        Returns:
-            True if stopped gracefully, False if forced
-        """
+        """停止处理器循环。"""
         async with self._lock:
             if not self._running:
                 logger.warning("Processor not running")
@@ -153,7 +92,6 @@ class TaskProcessor:
 
             if self._processor_task:
                 try:
-                    # Wait for current task to complete
                     await asyncio.wait_for(
                         self._processor_task,
                         timeout=timeout
@@ -176,23 +114,20 @@ class TaskProcessor:
             return True
 
     async def _processing_loop(self) -> None:
-        """Main processing loop."""
+        """主处理循环。"""
         logger.debug("[Processor] Processing loop started")
         logger.info(f"[Processor] Running={self._running}, Timeout={self._task_timeout}s")
 
         while self._running:
             try:
-                # Get next task
                 logger.debug("[Processor] Waiting for next task from queue...")
                 task = await self._queue.pop()
 
                 if task is None:
-                    # Queue is empty, wait and poll again
                     logger.debug(f"[Processor] Queue empty, sleeping for {self._poll_interval}s")
                     await asyncio.sleep(self._poll_interval)
                     continue
 
-                # Process the task
                 logger.info(f"[Processor] Got task {task.task_id}, processing...")
                 await self._process_task(task)
 
@@ -205,32 +140,23 @@ class TaskProcessor:
 
         logger.debug("Processing loop exited")
 
-    # ==================== Task Processing ====================
 
     async def _process_task(self, task: DownloadTask) -> None:
-        """
-        Process a single task.
-
-        Args:
-            task: Task to process
-        """
+        """处理单个任务。"""
         self._current_task = task
         logger.info(f"[Processor] Processing task {task.task_id}: url={task.url[:50]}..., quality={task.quality}")
 
         try:
-            # Transition to PROCESSING
             if not task.try_transition_to(TaskStatus.PROCESSING):
                 logger.warning(
                     f"[Processor] Cannot start task {task.task_id}: invalid state {task.status}"
                 )
                 return
 
-            # Emit started event
             logger.debug(f"[Processor] Emitting TASK_STARTED event for {task.task_id}")
             await self._events.emit(QueueEvent.TASK_STARTED, task)
             logger.info(f"[Processor] Started task {task.task_id}")
 
-            # Execute with timeout
             try:
                 logger.info(f"[Processor] Calling download function for {task.task_id}, timeout={self._task_timeout}s")
                 result = await asyncio.wait_for(
@@ -239,7 +165,6 @@ class TaskProcessor:
                 )
                 logger.info(f"[Processor] Download function returned for {task.task_id}: success={result.success if result else 'None'}")
 
-                # Handle result
                 if result and result.success:
                     await self._handle_success(task, result)
                 else:
@@ -251,7 +176,7 @@ class TaskProcessor:
                 await self._handle_timeout(task)
             except asyncio.CancelledError:
                 await self._handle_cancelled(task)
-                raise  # Re-raise to propagate cancellation
+                raise
 
         except Exception as e:
             logger.error(f"Unexpected error processing task {task.task_id}: {e}")
@@ -265,7 +190,7 @@ class TaskProcessor:
         task: DownloadTask,
         result: "DownloadResult"
     ) -> None:
-        """Handle successful task completion."""
+        """处理任务成功完成。"""
         task.result = result
         task.try_transition_to(TaskStatus.COMPLETED)
 
@@ -282,7 +207,7 @@ class TaskProcessor:
         task: DownloadTask,
         error: str
     ) -> None:
-        """Handle task failure."""
+        """处理任务失败。"""
         task.error = error
         task.try_transition_to(TaskStatus.FAILED)
 
@@ -292,7 +217,7 @@ class TaskProcessor:
         logger.warning(f"Task {task.task_id} failed: {error}")
 
     async def _handle_timeout(self, task: DownloadTask) -> None:
-        """Handle task timeout."""
+        """处理任务超时。"""
         task.error = f"Task timed out after {self._task_timeout}s"
         task.try_transition_to(TaskStatus.TIMEOUT)
 
@@ -305,7 +230,7 @@ class TaskProcessor:
         )
 
     async def _handle_cancelled(self, task: DownloadTask) -> None:
-        """Handle task cancellation."""
+        """处理任务取消。"""
         task.error = "Task was cancelled"
         task.try_transition_to(TaskStatus.CANCELLED)
 
@@ -314,37 +239,22 @@ class TaskProcessor:
 
         logger.info(f"Task {task.task_id} was cancelled")
 
-    # ==================== Task Control ====================
 
     async def cancel_current(self) -> bool:
-        """
-        Cancel the currently processing task.
-
-        Returns:
-            True if a task was cancelled, False if no task running
-        """
+        """取消当前处理中的任务。"""
         if not self._current_task:
             return False
 
-        # The task will be marked as cancelled in _handle_cancelled
-        # when the download function is interrupted
         if self._processor_task:
-            # This is a soft cancellation - we just mark intent
-            # The actual cancellation depends on the download function
+            # 仅标记取消，实际中断取决于下载函数
             logger.info(f"Requesting cancellation of task {self._current_task.task_id}")
             return True
 
         return False
 
-    # ==================== Status ====================
 
     def get_status(self) -> dict:
-        """
-        Get processor status.
-
-        Returns:
-            Status dictionary
-        """
+        """获取处理器状态。"""
         return {
             "running": self._running,
             "current_task": (

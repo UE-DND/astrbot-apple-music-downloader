@@ -1,8 +1,6 @@
 """
-Apple Music API Client
-
-
-Provides HTTP client functionality for Apple Music API requests.
+Apple Music API 客户端。
+提供 Apple Music API 请求的 HTTP 客户端能力。
 """
 
 import asyncio
@@ -22,7 +20,7 @@ from tenacity import (
     before_sleep_log,
 )
 
-# Try to use hishel for caching, fallback to plain httpx
+# 优先使用 hishel 缓存，失败则退回 httpx
 try:
     import hishel
     HAS_HISHEL = hasattr(hishel, 'AsyncCacheClient')
@@ -44,12 +42,12 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
-# Enable debug logging
+# 启用调试日志
 logger.setLevel(logging.DEBUG)
 
 
 class NameSolver:
-    """Custom DNS resolver for Apple CDN IP override."""
+    """用于覆盖 Apple CDN IP 的自定义 DNS 解析器。"""
 
     def __init__(self, cdn_ip: str = ""):
         self.cdn_ip = cdn_ip
@@ -71,7 +69,7 @@ class NameSolver:
 
 
 class AsyncCustomHost(AsyncHTTPTransport):
-    """Custom HTTP transport with DNS override support."""
+    """支持 DNS 覆盖的自定义 HTTP 传输。"""
 
     def __init__(self, solver: NameSolver, *args, **kwargs) -> None:
         self.solver = solver
@@ -83,11 +81,7 @@ class AsyncCustomHost(AsyncHTTPTransport):
 
 
 class WebAPI:
-    """
-    Apple Music Web API client.
-
-    Handles authentication, caching, and API requests to Apple Music.
-    """
+    """用于 Apple Music 的 Web API 客户端。"""
 
     client: Optional[httpx.AsyncClient]
     download_lock: asyncio.Semaphore
@@ -99,14 +93,7 @@ class WebAPI:
     _initialized: bool
 
     def __init__(self, proxy: str = "", parallel_num: int = 1, cdn_ip: str = ""):
-        """
-        Initialize the Web API client.
-
-        Args:
-            proxy: HTTP proxy URL (optional)
-            parallel_num: Maximum parallel downloads
-            cdn_ip: Custom Apple CDN IP (optional)
-        """
+        """初始化 Web API 客户端。"""
         self.cdn_ip = cdn_ip
         self._proxy = proxy
         self.token = None
@@ -120,7 +107,7 @@ class WebAPI:
         logger.info("[WebAPI] Instance created (lazy initialization)")
 
     async def _ensure_initialized(self):
-        """Ensure the API client is initialized with a valid token."""
+        """确保客户端完成初始化并持有有效 token。"""
         if self._initialized:
             return
 
@@ -130,10 +117,10 @@ class WebAPI:
 
             logger.info("[WebAPI] Starting async initialization...")
 
-            # Get token asynchronously
+            # 异步获取 token
             await self._set_token_async()
 
-            # Create HTTP client with the token
+            # 使用 token 创建 HTTP 客户端
             client_kwargs = {
                 "headers": {
                     "Authorization": f"Bearer {self.token}",
@@ -155,7 +142,7 @@ class WebAPI:
             logger.info("[WebAPI] Async initialization complete")
 
     async def _set_token_async(self):
-        """Fetch and set the API bearer token from Apple Music website (async version)."""
+        """异步获取并设置 Apple Music API token。"""
         logger.info("[WebAPI] Fetching Apple Music API token (async)...")
 
         max_attempts = 5
@@ -189,7 +176,7 @@ class WebAPI:
             except Exception as e:
                 logger.warning(f"[WebAPI] Attempt {attempt + 1}/{max_attempts} failed: {e}")
                 if attempt < max_attempts - 1:
-                    wait_time = min(2 ** attempt, 30)  # Exponential backoff, max 30s
+                    wait_time = min(2 ** attempt, 30)  # 指数退避，最大 30 秒
                     logger.info(f"[WebAPI] Retrying in {wait_time}s...")
                     await asyncio.sleep(wait_time)
                 else:
@@ -202,7 +189,7 @@ class WebAPI:
         stop=stop_after_attempt(32),
     )
     def _set_token(self):
-        """Fetch and set the API bearer token from Apple Music website (sync version - deprecated)."""
+        """同步获取并设置 Apple Music API token（已弃用）。"""
         logger.info("[WebAPI] Fetching Apple Music API token (sync)...")
         with httpx.Client(timeout=30.0) as client:
             logger.debug("[WebAPI] Requesting https://music.apple.com ...")
@@ -215,7 +202,7 @@ class WebAPI:
             logger.info(f"[WebAPI] Token obtained: {self.token[:20]}...")
 
     async def close(self):
-        """Close the HTTP client."""
+        """关闭 HTTP 客户端。"""
         if self.client:
             await self.client.aclose()
 
@@ -226,7 +213,7 @@ class WebAPI:
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
     async def _request(self, *args, **kwargs):
-        """Make a rate-limited HTTP request."""
+        """执行限速 HTTP 请求。"""
         await self._ensure_initialized()
         async with self.request_lock:
             return await self.client.request(*args, **kwargs)
@@ -238,15 +225,7 @@ class WebAPI:
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
     async def download_song(self, url: str) -> bytes:
-        """
-        Download audio data from URL.
-
-        Args:
-            url: The audio stream URL
-
-        Returns:
-            Raw audio bytes
-        """
+        """下载音频数据。"""
         async with self.download_lock:
             result = BytesIO()
             async with httpx.AsyncClient(
@@ -264,17 +243,7 @@ class WebAPI:
                     return result.getvalue()
 
     async def get_album_info(self, album_id: str, storefront: str, lang: str) -> AlbumMeta:
-        """
-        Get album metadata.
-
-        Args:
-            album_id: Apple Music album ID
-            storefront: Region code
-            lang: Language code
-
-        Returns:
-            AlbumMeta object
-        """
+        """获取专辑元数据。"""
         req = await self._request(
             "GET",
             f"https://amp-api.music.apple.com/v1/catalog/{storefront}/albums/{album_id}",
@@ -290,7 +259,7 @@ class WebAPI:
         )
         album_info_obj = AlbumMeta.model_validate(req.json())
 
-        # Handle pagination for tracks
+        # 处理曲目分页
         if album_info_obj.data[0].relationships.tracks.next:
             all_tracks = await self.get_album_tracks(album_id, storefront, lang)
             album_info_obj.data[0].relationships.tracks.data = all_tracks
@@ -300,7 +269,7 @@ class WebAPI:
     async def get_album_tracks(
         self, album_id: str, storefront: str, lang: str, offset: int = 0
     ) -> list:
-        """Get all tracks from an album with pagination."""
+        """分页获取专辑曲目。"""
         req = await self._request(
             "GET",
             f"https://amp-api.music.apple.com/v1/catalog/{storefront}/albums/{album_id}/tracks?offset={offset}",
@@ -317,7 +286,7 @@ class WebAPI:
     async def get_playlist_info_and_tracks(
         self, playlist_id: str, storefront: str, lang: str
     ) -> PlaylistInfo:
-        """Get playlist info and all tracks."""
+        """获取歌单信息与全部曲目。"""
         resp = await self._request(
             "GET",
             f"https://amp-api.music.apple.com/v1/catalog/{storefront}/playlists/{playlist_id}",
@@ -334,7 +303,7 @@ class WebAPI:
     async def get_playlist_tracks(
         self, playlist_id: str, storefront: str, lang: str, offset: int = 0
     ) -> list:
-        """Get all tracks from a playlist with pagination."""
+        """分页获取歌单曲目。"""
         resp = await self._request(
             "GET",
             f"https://amp-api.music.apple.com/v1/catalog/{storefront}/playlists/{playlist_id}/tracks",
@@ -352,34 +321,14 @@ class WebAPI:
         return tracks
 
     async def get_cover(self, url: str, cover_format: str, cover_size: str) -> bytes:
-        """
-        Download album cover.
-
-        Args:
-            url: Cover URL template
-            cover_format: Format (jpg, png)
-            cover_size: Size (e.g., '5000x5000')
-
-        Returns:
-            Cover image bytes
-        """
+        """下载专辑封面。"""
         async with self.request_lock:
             formatted_url = regex.sub("bb.jpg", f"bb.{cover_format}", url)
             req = await self._request("GET", formatted_url.replace("{w}x{h}", cover_size))
             return req.content
 
     async def get_song_info(self, song_id: str, storefront: str, lang: str) -> Optional[object]:
-        """
-        Get song metadata.
-
-        Args:
-            song_id: Apple Music song ID
-            storefront: Region code
-            lang: Language code
-
-        Returns:
-            Song data object or None if not found
-        """
+        """获取歌曲元数据。"""
         logger.info(f"[WebAPI] get_song_info: song_id={song_id}, storefront={storefront}, lang={lang}")
         req = await self._request(
             "GET",
@@ -398,7 +347,7 @@ class WebAPI:
         return None
 
     async def song_exist(self, song_id: str, storefront: str) -> bool:
-        """Check if a song exists in a storefront."""
+        """检查歌曲是否存在于指定地区。"""
         req = await self._request(
             "HEAD",
             f"https://amp-api.music.apple.com/v1/catalog/{storefront}/songs/{song_id}",
@@ -406,7 +355,7 @@ class WebAPI:
         return req.status_code == 200
 
     async def album_exist(self, album_id: str, storefront: str) -> bool:
-        """Check if an album exists in a storefront."""
+        """检查专辑是否存在于指定地区。"""
         req = await self._request(
             "HEAD",
             f"https://amp-api.music.apple.com/v1/catalog/{storefront}/albums/{album_id}",
@@ -416,7 +365,7 @@ class WebAPI:
     async def get_albums_from_artist(
         self, artist_id: str, storefront: str, lang: str, offset: int = 0
     ) -> list[str]:
-        """Get all album URLs from an artist."""
+        """获取艺人全部专辑链接。"""
         resp = await self._request(
             "GET",
             f"https://amp-api.music.apple.com/v1/catalog/{storefront}/artists/{artist_id}/albums",
@@ -436,7 +385,7 @@ class WebAPI:
     async def get_songs_from_artist(
         self, artist_id: str, storefront: str, lang: str, offset: int = 0
     ) -> list[str]:
-        """Get all song URLs from an artist."""
+        """获取艺人全部歌曲链接。"""
         resp = await self._request(
             "GET",
             f"https://amp-api.music.apple.com/v1/catalog/{storefront}/artists/{artist_id}/songs",
@@ -454,7 +403,7 @@ class WebAPI:
         return list(set(songs))
 
     async def get_artist_info(self, artist_id: str, storefront: str, lang: str) -> ArtistInfo:
-        """Get artist metadata."""
+        """获取艺人元数据。"""
         resp = await self._request(
             "GET",
             f"https://amp-api.music.apple.com/v1/catalog/{storefront}/artists/{artist_id}",
@@ -463,17 +412,17 @@ class WebAPI:
         return ArtistInfo.model_validate(resp.json())
 
     async def download_m3u8(self, m3u8_url: str) -> str:
-        """Download M3U8 playlist content."""
+        """下载 M3U8 内容。"""
         resp = await self._request("GET", m3u8_url)
         return resp.text
 
     async def get_real_url(self, url: str) -> str:
-        """Follow redirects and get the final URL."""
+        """跟随重定向获取最终 URL。"""
         req = await self._request("GET", url, follow_redirects=True)
         return str(req.url)
 
     async def get_album_by_upc(self, upc: str, storefront: str) -> Optional[dict]:
-        """Search for an album by UPC."""
+        """按 UPC 查询专辑。"""
         req = await self._request(
             "GET",
             f"https://amp-api.music.apple.com/v1/catalog/{storefront}/albums",
@@ -491,7 +440,7 @@ class WebAPI:
     async def exist_on_storefront_by_song_id(
         self, song_id: str, storefront: str, check_storefront: str
     ) -> bool:
-        """Check if a song exists on a different storefront."""
+        """检查歌曲是否存在于其他地区。"""
         if storefront.upper() == check_storefront.upper():
             return True
         return await self.song_exist(song_id, check_storefront)
@@ -499,7 +448,7 @@ class WebAPI:
     async def exist_on_storefront_by_album_id(
         self, album_id: str, storefront: str, check_storefront: str
     ) -> bool:
-        """Check if an album exists on a different storefront."""
+        """检查专辑是否存在于其他地区。"""
         if storefront.upper() == check_storefront.upper():
             return True
         return await self.album_exist(album_id, check_storefront)

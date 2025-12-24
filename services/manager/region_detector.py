@@ -1,7 +1,6 @@
 """
-Region Detector
-
-Detects available regions and song availability across different storefronts.
+地区检测器。
+检测地区与歌曲可用性。
 """
 
 import asyncio
@@ -16,16 +15,16 @@ logger = get_logger()
 
 @dataclass
 class RegionInfo:
-    """Information about a specific region/storefront."""
-    code: str  # Region code (e.g., "us", "cn", "jp")
-    name: str  # Human-readable name
+    """地区信息。"""
+    code: str  # 地区代码（如 "us"、"cn"、"jp"）
+    name: str  # 展示名称
     available: bool = True
     last_check: datetime = field(default_factory=datetime.now)
 
 
 @dataclass
 class SongAvailability:
-    """Song availability across regions."""
+    """歌曲跨地区可用性。"""
     adam_id: str
     available_regions: Set[str] = field(default_factory=set)
     unavailable_regions: Set[str] = field(default_factory=set)
@@ -33,17 +32,9 @@ class SongAvailability:
 
 
 class RegionDetector:
-    """
-    Detects and tracks region availability.
+    """地区可用性检测与缓存管理。"""
 
-    Features:
-    - Discover available regions from Apple Music API
-    - Check song availability in specific regions
-    - Cache availability results
-    - Auto-refresh stale data
-    """
-
-    # Common Apple Music storefronts
+    # 常见 Apple Music 店面
     KNOWN_REGIONS = {
         "us": "United States",
         "cn": "China",
@@ -69,45 +60,29 @@ class RegionDetector:
 
     def __init__(
         self,
-        cache_ttl: int = 3600,  # 1 hour default
+        cache_ttl: int = 3600,  # 默认 1 小时
         api_timeout: int = 10,
     ):
-        """
-        Initialize region detector.
-
-        Args:
-            cache_ttl: Cache TTL in seconds
-            api_timeout: API request timeout in seconds
-        """
+        """初始化地区检测器。"""
         self.cache_ttl = cache_ttl
         self.api_timeout = api_timeout
 
-        # Caches
+        # 缓存
         self._regions: Dict[str, RegionInfo] = {}
         self._song_availability: Dict[str, SongAvailability] = {}
 
-        # Initialize known regions
+        # 初始化已知地区
         for code, name in self.KNOWN_REGIONS.items():
             self._regions[code] = RegionInfo(code=code, name=name)
 
         logger.info(f"Region detector initialized with {len(self._regions)} known regions")
 
     def get_all_regions(self) -> List[RegionInfo]:
-        """
-        Get all known regions.
-
-        Returns:
-            List of RegionInfo
-        """
+        """获取全部已知地区。"""
         return list(self._regions.values())
 
     def get_available_regions(self) -> List[str]:
-        """
-        Get list of available region codes.
-
-        Returns:
-            List of region codes
-        """
+        """获取可用地区代码列表。"""
         return [
             region.code
             for region in self._regions.values()
@@ -115,15 +90,7 @@ class RegionDetector:
         ]
 
     def get_region_name(self, code: str) -> Optional[str]:
-        """
-        Get human-readable name for region code.
-
-        Args:
-            code: Region code
-
-        Returns:
-            Region name or None
-        """
+        """获取地区显示名。"""
         region = self._regions.get(code)
         return region.name if region else None
 
@@ -133,18 +100,8 @@ class RegionDetector:
         regions: Optional[List[str]] = None,
         force_refresh: bool = False
     ) -> SongAvailability:
-        """
-        Check song availability across regions.
-
-        Args:
-            adam_id: Song ID
-            regions: Specific regions to check (None = all known regions)
-            force_refresh: Force refresh cached data
-
-        Returns:
-            SongAvailability object
-        """
-        # Check cache
+        """检查歌曲在多个地区的可用性。"""
+        # 检查缓存
         if not force_refresh and adam_id in self._song_availability:
             cached = self._song_availability[adam_id]
             age = (datetime.now() - cached.last_check).total_seconds()
@@ -153,13 +110,13 @@ class RegionDetector:
                 logger.debug(f"Using cached availability for {adam_id}")
                 return cached
 
-        # Determine regions to check
+        # 确定待检测地区
         if regions is None:
             regions = self.get_available_regions()
 
         logger.info(f"Checking availability for {adam_id} in {len(regions)} regions")
 
-        # Check availability concurrently
+        # 并发检测可用性
         availability = SongAvailability(adam_id=adam_id)
 
         tasks = []
@@ -167,7 +124,7 @@ class RegionDetector:
             task = self._check_song_in_region(adam_id, region)
             tasks.append((region, task))
 
-        # Gather results
+        # 汇总结果
         for region, task in tasks:
             try:
                 is_available = await task
@@ -179,7 +136,7 @@ class RegionDetector:
                 logger.error(f"Error checking {adam_id} in {region}: {e}")
                 availability.unavailable_regions.add(region)
 
-        # Cache result
+        # 缓存结果
         self._song_availability[adam_id] = availability
 
         logger.info(
@@ -190,18 +147,9 @@ class RegionDetector:
         return availability
 
     async def _check_song_in_region(self, adam_id: str, region: str) -> bool:
-        """
-        Check if song is available in a specific region.
-
-        Args:
-            adam_id: Song ID
-            region: Region code
-
-        Returns:
-            True if available, False otherwise
-        """
+        """检查歌曲在指定地区的可用性。"""
         try:
-            # Use Apple Music API lookup endpoint
+            # 使用 Apple Music API 查询接口
             url = f"https://itunes.apple.com/lookup"
             params = {
                 "id": adam_id,
@@ -221,7 +169,7 @@ class RegionDetector:
 
                     data = await response.json()
 
-                    # Check if song is in results
+                    # 检查歌曲是否在结果中
                     result_count = data.get("resultCount", 0)
                     return result_count > 0
 
@@ -234,28 +182,11 @@ class RegionDetector:
             return False
 
     def get_cached_availability(self, adam_id: str) -> Optional[SongAvailability]:
-        """
-        Get cached availability for a song.
-
-        Args:
-            adam_id: Song ID
-
-        Returns:
-            SongAvailability or None if not cached
-        """
+        """获取歌曲可用性缓存。"""
         return self._song_availability.get(adam_id)
 
     def is_available_in_region(self, adam_id: str, region: str) -> Optional[bool]:
-        """
-        Check if song is available in a region (from cache).
-
-        Args:
-            adam_id: Song ID
-            region: Region code
-
-        Returns:
-            True/False if known, None if not cached
-        """
+        """从缓存判断歌曲在地区内是否可用。"""
         availability = self.get_cached_availability(adam_id)
         if not availability:
             return None
@@ -272,33 +203,19 @@ class RegionDetector:
         adam_id: str,
         preferred_region: str
     ) -> List[str]:
-        """
-        Suggest alternative regions if song is not available in preferred region.
-
-        Args:
-            adam_id: Song ID
-            preferred_region: User's preferred region
-
-        Returns:
-            List of alternative region codes
-        """
-        # Check availability across all regions
+        """在首选地区不可用时推荐替代地区。"""
+        # 检查全地区可用性
         availability = await self.check_song_availability(adam_id)
 
-        # If available in preferred region, no alternatives needed
+        # 首选地区可用则无需备选
         if preferred_region in availability.available_regions:
             return []
 
-        # Return all available regions
+        # 返回所有可用地区
         return list(availability.available_regions)
 
     def clear_cache(self, adam_id: Optional[str] = None):
-        """
-        Clear availability cache.
-
-        Args:
-            adam_id: Specific song ID to clear, or None to clear all
-        """
+        """清理可用性缓存。"""
         if adam_id:
             self._song_availability.pop(adam_id, None)
             logger.info(f"Cleared cache for {adam_id}")
@@ -307,12 +224,7 @@ class RegionDetector:
             logger.info("Cleared all availability cache")
 
     def get_cache_stats(self) -> Dict:
-        """
-        Get cache statistics.
-
-        Returns:
-            Dict with cache stats
-        """
+        """获取缓存统计信息。"""
         now = datetime.now()
         fresh_count = 0
         stale_count = 0
@@ -333,7 +245,7 @@ class RegionDetector:
         }
 
     async def refresh_stale_cache(self):
-        """Refresh stale cache entries."""
+        """刷新过期缓存条目。"""
         now = datetime.now()
         to_refresh = []
 
@@ -352,36 +264,20 @@ class RegionDetector:
                     logger.error(f"Error refreshing {adam_id}: {e}")
 
     def add_custom_region(self, code: str, name: str):
-        """
-        Add a custom region.
-
-        Args:
-            code: Region code
-            name: Region name
-        """
+        """添加自定义地区。"""
         if code not in self._regions:
             self._regions[code] = RegionInfo(code=code, name=name)
             logger.info(f"Added custom region: {code} ({name})")
 
     def mark_region_unavailable(self, code: str):
-        """
-        Mark a region as unavailable.
-
-        Args:
-            code: Region code
-        """
+        """标记地区为不可用。"""
         if code in self._regions:
             self._regions[code].available = False
             self._regions[code].last_check = datetime.now()
             logger.warning(f"Marked region {code} as unavailable")
 
     def mark_region_available(self, code: str):
-        """
-        Mark a region as available.
-
-        Args:
-            code: Region code
-        """
+        """标记地区为可用。"""
         if code in self._regions:
             self._regions[code].available = True
             self._regions[code].last_check = datetime.now()

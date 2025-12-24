@@ -1,5 +1,5 @@
 """
-Logger Abstraction Layer
+日志抽象层。
 """
 
 import logging
@@ -59,13 +59,10 @@ class PythonLogger(LoggerInterface):
 
 
 class AstrBotLoggerAdapter(LoggerInterface):
-    """AstrBot logger 适配器"""
+    """用于 AstrBot 的日志适配器。"""
 
     def __init__(self, astrbot_logger: Any):
-        """
-        Args:
-            astrbot_logger: astrbot.api.logger 实例
-        """
+        """初始化 AstrBot 日志适配器。"""
         self._logger = astrbot_logger
 
     def debug(self, msg: str, *args, **kwargs) -> None:
@@ -85,17 +82,12 @@ class AstrBotLoggerAdapter(LoggerInterface):
 
 
 def get_logger(name: str = "apple_music_downloader") -> LoggerInterface:
-    """
-    获取 logger 实例(自动检测环境)
-
-    在 AstrBot 环境中返回 AstrBotLoggerAdapter,
-    否则返回 PythonLogger
-    """
+    """获取 logger 实例（自动检测环境）。"""
     try:
         from astrbot.api import logger as astrbot_logger
         return AstrBotLoggerAdapter(astrbot_logger)
     except ImportError:
-        # 独立运行模式,使用 Python logging
+        # 独立运行模式，使用 Python 日志
         return PythonLogger(name)
 
 

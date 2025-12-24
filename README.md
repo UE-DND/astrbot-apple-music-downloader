@@ -43,6 +43,16 @@ git clone https://gh-proxy.com/https://github.com/UE-DND/astrbot_apple_music_dow
    /am https://music.apple.com/cn/album/xxx/123?i=456 aac
    ```
 
+### 示例
+
+```bash
+# 下载单曲（不添加音质参数时，默认为alac）
+/am https://music.apple.com/cn/album/青春コンプレックス/1657318546?i=1657318551
+
+# 下载单曲（AAC 音质）
+/am https://music.apple.com/cn/album/富士山下/1443345687?i=1443346107 aac
+```
+
 ### 指令概览
 
 | 指令 | 说明 |

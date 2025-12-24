@@ -1,4 +1,4 @@
-"""Song data model."""
+"""歌曲数据模型。"""
 from __future__ import annotations
 
 from typing import List, Optional

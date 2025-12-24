@@ -1,9 +1,6 @@
 """
-Wrapper Proxy
-
-Proxies decryption requests to Docker wrapper containers.
-This allows us to keep the complex C/C++ decryption logic in containers
-while implementing the manager logic in Python.
+Wrapper 代理。
+将解密请求转发到 Docker wrapper 容器。
 """
 
 import asyncio
@@ -21,7 +18,7 @@ from .retry_utils import retry_async, RetryConfig, RetryStrategy, ErrorHandler
 
 @dataclass
 class WrapperProxyConfig:
-    """Configuration for wrapper proxy."""
+    """用于 Wrapper 的代理配置。"""
     host: str = "127.0.0.1"
     decrypt_port: int = 10020
     m3u8_port: int = 20020
@@ -30,12 +27,7 @@ class WrapperProxyConfig:
 
 
 class WrapperProxy:
-    """
-    Proxy for Docker wrapper container.
-
-    Forwards requests to the wrapper HTTP endpoints and handles responses.
-    Each proxy instance corresponds to one wrapper container (one account).
-    """
+    """用于 Docker wrapper 的容器代理。"""
 
     def __init__(
         self,
@@ -44,32 +36,24 @@ class WrapperProxy:
         region: str,
         config: WrapperProxyConfig,
     ):
-        """
-        Initialize wrapper proxy.
-
-        Args:
-            instance_id: Unique instance ID
-            username: Apple Music username
-            region: User's region/storefront
-            config: Proxy configuration
-        """
+        """初始化 wrapper 代理。"""
         self.instance_id = instance_id
         self.username = username
         self.region = region
         self.config = config
 
-        # Construct base URLs
+        # 构造基础地址
         self.account_url = f"http://{config.host}:{config.account_port}"
 
-        # HTTP client (only for account service)
+        # HTTP 客户端（仅账号服务使用）
         self._session: Optional[aiohttp.ClientSession] = None
 
-        # State tracking
+        # 状态跟踪
         self._last_adam_id: str = ""
         self._active: bool = False
 
     async def start(self):
-        """Start the proxy (create HTTP session for account service)."""
+        """启动代理并创建 HTTP 会话。"""
         if self._session is None:
             timeout = aiohttp.ClientTimeout(total=self.config.timeout)
             self._session = aiohttp.ClientSession(timeout=timeout)
@@ -77,7 +61,7 @@ class WrapperProxy:
             logger.debug(f"Wrapper proxy started: {self.instance_id}")
 
     async def stop(self):
-        """Stop the proxy (close HTTP session)."""
+        """停止代理并关闭 HTTP 会话。"""
         if self._session:
             await self._session.close()
             self._session = None
@@ -86,15 +70,15 @@ class WrapperProxy:
 
     @property
     def is_active(self) -> bool:
-        """Check if proxy is active."""
+        """检查代理是否可用。"""
         return self._active and self._session is not None
 
     def get_last_adam_id(self) -> str:
-        """Get the last adam_id this instance processed."""
+        """获取该实例最近处理的 adam_id。"""
         return self._last_adam_id
 
     def set_last_adam_id(self, adam_id: str):
-        """Set the last adam_id this instance processed."""
+        """设置该实例最近处理的 adam_id。"""
         self._last_adam_id = adam_id
 
     async def decrypt(
@@ -104,36 +88,12 @@ class WrapperProxy:
         sample: bytes,
         sample_index: int
     ) -> Tuple[bool, bytes, Optional[str]]:
-        """
-        Decrypt audio sample using raw socket communication.
-
-        The C wrapper protocol (handle function in main.c):
-        Initial context setup (once per song/connection):
-        1. adamSize (1 byte uint8) - adam_id length
-        2. adam (adamSize bytes) - adam_id string
-        3. uri_size (1 byte uint8) - key URI length
-        4. uri (uri_size bytes) - key URI string
-
-        Then loop for each sample:
-        5. size (4 bytes uint32 native endian) - sample size
-        6. sample (size bytes) - encrypted data
-        7. Server returns decrypted data (size bytes)
-
-        Args:
-            adam_id: Song ID
-            key: Decryption key URI (e.g., "skd://...")
-            sample: Encrypted sample data
-            sample_index: Sample index
-
-        Returns:
-            Tuple of (success, decrypted_data, error)
-        """
-        print(f"[WRAPPER_PROXY] DEBUG: decrypt called with adam_id={adam_id}, sample_size={len(sample)}")
+        """通过原始 socket 解密单个样本。"""
         if not self.is_active:
             return False, b"", "Proxy not active"
 
         try:
-            # Connect to decrypt port
+            # 连接解密端口
             reader, writer = await asyncio.open_connection(
                 self.config.host,
                 self.config.decrypt_port
@@ -141,29 +101,29 @@ class WrapperProxy:
 
             logger.info(f"[Decrypt] Connecting to {self.config.host}:{self.config.decrypt_port} with adam_id={adam_id}, sample_size={len(sample)}")
 
-            # Send context information
-            # Format: [adamSize (1 byte)][adam][uri_size (1 byte)][uri]
+            # 发送上下文信息
+            # 格式：[adamSize(1 byte)][adam][uri_size(1 byte)][uri]
             adam_id_bytes = adam_id.encode('utf-8')
             key_bytes = key.encode('utf-8')
 
-            # Send adam_id length (1 byte uint8)
+            # 发送 adam_id 长度（1 byte uint8）
             writer.write(bytes([len(adam_id_bytes)]))
-            # Send adam_id
+            # 发送 adam_id
             writer.write(adam_id_bytes)
-            # Send uri/key length (1 byte uint8) - NOT 4 bytes!
+            # 发送 uri/key 长度（1 byte uint8，非 4 byte）
             writer.write(bytes([len(key_bytes)]))
-            # Send uri/key
+            # 发送 uri/key
             writer.write(key_bytes)
             await writer.drain()
 
-            # Now send sample for decryption
-            # Send sample length (4 bytes uint32 native/little endian)
+            # 发送样本进行解密
+            # 发送样本长度（4 bytes uint32 小端）
             writer.write(struct.pack('<I', len(sample)))
-            # Send sample data
+            # 发送样本数据
             writer.write(sample)
             await writer.drain()
 
-            # Read decrypted data (same length as sample)
+            # 读取解密数据（长度与样本一致）
             decrypted_data = await asyncio.wait_for(
                 reader.readexactly(len(sample)),
                 timeout=30.0
@@ -182,7 +142,7 @@ class WrapperProxy:
             logger.error(f"[Decrypt] Exception: {e}")
             return False, b"", str(e)
         finally:
-            # Close connection
+            # 关闭连接
             if 'writer' in locals():
                 writer.close()
                 await writer.wait_closed()
@@ -194,36 +154,17 @@ class WrapperProxy:
         samples: list,
         progress_callback=None
     ) -> Tuple[bool, list, Optional[str]]:
-        """
-        Decrypt all audio samples using a SINGLE connection (fast mode).
-
-        The C wrapper protocol allows sending multiple samples on one connection:
-        1. Connect once
-        2. Send adam_id and key (once)
-        3. Loop: send sample size + data, read decrypted data
-        4. Close connection
-
-        This is ~100x faster than decrypt() which creates a new connection per sample.
-
-        Args:
-            adam_id: Song ID
-            key: Decryption key URI (e.g., "skd://...")
-            samples: List of (sample_data, sample_index) tuples
-            progress_callback: Optional callback(decrypted_count, total_count)
-
-        Returns:
-            Tuple of (success, decrypted_samples_list, error)
-        """
+        """使用单连接批量解密样本（快速模式）。"""
         if not self.is_active:
             return False, [], "Proxy not active"
 
         total_samples = len(samples)
-        # Return decrypted samples in INPUT ORDER (not by sample_index!)
-        # Caller is responsible for mapping back to original positions
+        # 按输入顺序返回解密结果（非 sample_index 顺序）
+        # 调用方负责映射回原位置
         decrypted_samples = []
 
         try:
-            # Connect to decrypt port (ONCE for all samples)
+            # 连接解密端口（全量样本共用一次连接）
             reader, writer = await asyncio.open_connection(
                 self.config.host,
                 self.config.decrypt_port
@@ -231,38 +172,38 @@ class WrapperProxy:
 
             logger.info(f"[Decrypt] Connected to {self.config.host}:{self.config.decrypt_port} for {total_samples} samples")
 
-            # Send context information (ONCE)
+            # 发送上下文信息（仅一次）
             adam_id_bytes = adam_id.encode('utf-8')
             key_bytes = key.encode('utf-8')
 
-            # Send adam_id length (1 byte uint8)
+            # 发送 adam_id 长度（1 byte uint8）
             writer.write(bytes([len(adam_id_bytes)]))
-            # Send adam_id
+            # 发送 adam_id
             writer.write(adam_id_bytes)
-            # Send uri/key length (1 byte uint8)
+            # 发送 uri/key 长度（1 byte uint8）
             writer.write(bytes([len(key_bytes)]))
-            # Send uri/key
+            # 发送 uri/key
             writer.write(key_bytes)
             await writer.drain()
 
-            # Now loop through all samples on the SAME connection
+            # 在同一连接上循环发送样本
             for i, (sample_data, sample_index) in enumerate(samples):
-                # Send sample length (4 bytes uint32 little endian)
+                # 发送样本长度（4 bytes uint32 小端）
                 writer.write(struct.pack('<I', len(sample_data)))
-                # Send sample data
+                # 发送样本数据
                 writer.write(sample_data)
                 await writer.drain()
 
-                # Read decrypted data (same length as sample)
+                # 读取解密数据（长度与样本一致）
                 decrypted_data = await asyncio.wait_for(
                     reader.readexactly(len(sample_data)),
                     timeout=30.0
                 )
 
-                # Append in input order - caller maps back to original positions
+                # 按输入顺序追加，调用方自行映射原位置
                 decrypted_samples.append(decrypted_data)
 
-                # Progress callback
+                # 进度回调
                 if progress_callback and (i + 1) % 100 == 0:
                     progress_callback(i + 1, total_samples)
 
@@ -282,7 +223,7 @@ class WrapperProxy:
             logger.error(f"[Decrypt] Exception: {e}")
             return False, [], str(e)
         finally:
-            # Close connection
+            # 关闭连接
             if 'writer' in locals():
                 writer.close()
                 await writer.wait_closed()
@@ -294,25 +235,13 @@ class WrapperProxy:
         retry_on_exceptions=(ConnectionError, socket.timeout)
     ))
     async def get_m3u8(self, adam_id: str) -> Tuple[bool, str, Optional[str]]:
-        """
-        Get M3U8 playlist URL using raw socket communication.
-
-        The C wrapper protocol:
-        - Send: [adamSize (1 byte)][adamId (adamSize bytes)]
-        - Receive: plain text URL + newline (or just newline on failure)
-
-        Args:
-            adam_id: Song ID
-
-        Returns:
-            Tuple of (success, m3u8_url, error)
-        """
+        """通过原始 socket 获取 M3U8 链接。"""
         if not self.is_active:
             return False, "", "Proxy not active"
 
-        # Create socket connection
+        # 创建 socket 连接
         try:
-            # Connect to m3u8 port
+            # 连接 m3u8 端口
             reader, writer = await asyncio.open_connection(
                 self.config.host,
                 self.config.m3u8_port
@@ -320,16 +249,16 @@ class WrapperProxy:
 
             logger.debug(f"[M3U8] Connecting to {self.config.host}:{self.config.m3u8_port} for adam_id={adam_id}")
 
-            # According to C code: send adam_id as [adamSize][adamId]
+            # 按 C 实现发送 adam_id：[adamSize][adamId]
             adam_id_bytes = adam_id.encode('utf-8')
 
-            # Send adam_id length and then adam_id
+            # 先发送长度，再发送 adam_id
             writer.write(bytes([len(adam_id_bytes)]))  # uint8
             writer.write(adam_id_bytes)
             await writer.drain()
 
-            # Read response: plain text URL ending with newline
-            # The C code sends: m3u8_url + "\n" or just "\n" on failure
+            # 读取响应：以换行结尾的纯文本 URL
+            # C 实现：成功返回 m3u8_url + "\n"，失败仅返回 "\n"
             response = await asyncio.wait_for(reader.readline(), timeout=30.0)
             m3u8_url = response.decode('utf-8', errors='ignore').strip()
 
@@ -350,7 +279,7 @@ class WrapperProxy:
             logger.error(f"[M3U8] Exception: {e}")
             return False, "", str(e)
         finally:
-            # Close connection
+            # 关闭连接
             if 'writer' in locals():
                 writer.close()
                 await writer.wait_closed()
@@ -361,17 +290,7 @@ class WrapperProxy:
         storefront: str,
         language: str
     ) -> Tuple[bool, dict, Optional[str]]:
-        """
-        Get song lyrics.
-
-        Args:
-            adam_id: Song ID
-            storefront: Storefront/region code
-            language: Language code
-
-        Returns:
-            Tuple of (success, lyrics_data, error)
-        """
+        """获取歌曲歌词。"""
         if not self.is_active:
             return False, {}, "Proxy not active"
 
@@ -404,12 +323,7 @@ class WrapperProxy:
             return False, {}, str(e)
 
     async def get_account_info(self) -> Optional[dict]:
-        """
-        Get account information from wrapper.
-
-        Returns:
-            Dict with storefront_id, dev_token, music_token or None
-        """
+        """获取 wrapper 账户信息。"""
         if not self.is_active:
             return None
 
@@ -434,17 +348,12 @@ class WrapperProxy:
             return None
 
     async def health_check(self) -> bool:
-        """
-        Check if wrapper container is healthy.
-
-        Returns:
-            True if healthy, False otherwise
-        """
+        """检查 wrapper 容器健康状态。"""
         if not self.is_active:
             return False
 
         try:
-            # Use account endpoint for health check
+            # 使用账号接口做健康检查
             async with self._session.get(
                 f"{self.account_url}/account",
                 timeout=aiohttp.ClientTimeout(total=5)
@@ -455,16 +364,6 @@ class WrapperProxy:
 
 
 def create_instance_id(username: str) -> str:
-    """
-    Create deterministic instance ID from username.
-
-    Uses UUID v5 with the same namespace as the Go implementation.
-
-    Args:
-        username: Apple Music username
-
-    Returns:
-        Instance ID string
-    """
+    """基于用户名生成确定性实例 ID。"""
     namespace = uuid.UUID("77777777-7777-7777-7777-777777777777")
     return str(uuid.uuid5(namespace, username))

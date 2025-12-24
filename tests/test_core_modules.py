@@ -1,7 +1,6 @@
 """
-Unit Tests for Core Modules
-
-Tests for WrapperProxy, InstanceManager, and Dispatcher.
+核心模块单元测试。
+覆盖 WrapperProxy、InstanceManager 与 Dispatcher。
 """
 
 import asyncio
@@ -12,7 +11,7 @@ from datetime import datetime
 import sys
 from pathlib import Path
 
-# Add project root to path
+# 将项目根目录加入路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -27,13 +26,9 @@ from services.manager import (
 )
 
 
-# ============================================================================
-# WrapperProxy Tests
-# ============================================================================
-
 @pytest.fixture
 def wrapper_proxy_config():
-    """Create wrapper proxy config."""
+    """创建 wrapper 代理配置。"""
     return WrapperProxyConfig(
         host="127.0.0.1",
         decrypt_port=10020,
@@ -44,7 +39,7 @@ def wrapper_proxy_config():
 
 @pytest.fixture
 def wrapper_proxy(wrapper_proxy_config):
-    """Create wrapper proxy instance."""
+    """创建 wrapper 代理实例。"""
     return WrapperProxy(
         instance_id="test-instance",
         username="test@example.com",
@@ -55,7 +50,7 @@ def wrapper_proxy(wrapper_proxy_config):
 
 @pytest.mark.asyncio
 async def test_wrapper_proxy_initialization(wrapper_proxy):
-    """Test wrapper proxy initialization."""
+    """测试 wrapper 代理初始化。"""
     assert wrapper_proxy.instance_id == "test-instance"
     assert wrapper_proxy.username == "test@example.com"
     assert wrapper_proxy.region == "us"
@@ -64,20 +59,20 @@ async def test_wrapper_proxy_initialization(wrapper_proxy):
 
 @pytest.mark.asyncio
 async def test_wrapper_proxy_start_stop(wrapper_proxy):
-    """Test wrapper proxy start and stop."""
-    # Start
+    """测试 wrapper 代理启动与停止。"""
+    # 启动
     await wrapper_proxy.start()
     assert wrapper_proxy._session is not None
 
-    # Stop
+    # 停止
     await wrapper_proxy.stop()
     assert wrapper_proxy._session is None
 
 
 @pytest.mark.asyncio
 async def test_wrapper_proxy_health_check_success(wrapper_proxy):
-    """Test successful health check."""
-    # Mock successful HTTP response
+    """测试健康检查成功。"""
+    # 模拟成功的 HTTP 响应
     with patch('aiohttp.ClientSession.get') as mock_get:
         mock_response = AsyncMock()
         mock_response.status = 200
@@ -94,8 +89,8 @@ async def test_wrapper_proxy_health_check_success(wrapper_proxy):
 
 @pytest.mark.asyncio
 async def test_wrapper_proxy_health_check_failure(wrapper_proxy):
-    """Test failed health check."""
-    # Mock failed HTTP response
+    """测试健康检查失败。"""
+    # 模拟失败的 HTTP 响应
     with patch('aiohttp.ClientSession.get') as mock_get:
         mock_get.side_effect = Exception("Connection refused")
 
@@ -108,8 +103,8 @@ async def test_wrapper_proxy_health_check_failure(wrapper_proxy):
 
 @pytest.mark.asyncio
 async def test_wrapper_proxy_decrypt_success(wrapper_proxy):
-    """Test successful decryption."""
-    # Mock successful socket response
+    """测试解密成功。"""
+    # 模拟成功的 socket 响应
     with patch("asyncio.open_connection", new_callable=AsyncMock) as mock_open:
         reader = AsyncMock()
         reader.readexactly = AsyncMock(return_value=b"decrypted_data")
@@ -136,8 +131,8 @@ async def test_wrapper_proxy_decrypt_success(wrapper_proxy):
 
 @pytest.mark.asyncio
 async def test_wrapper_proxy_decrypt_failure(wrapper_proxy):
-    """Test failed decryption."""
-    # Mock connection failure
+    """测试解密失败。"""
+    # 模拟连接失败
     with patch(
         "asyncio.open_connection",
         new_callable=AsyncMock,
@@ -158,26 +153,22 @@ async def test_wrapper_proxy_decrypt_failure(wrapper_proxy):
         assert "Connection refused" in error
 
 
-# ============================================================================
-# InstanceManager Tests
-# ============================================================================
-
 @pytest.fixture
 def instance_manager():
-    """Create instance manager."""
+    """创建实例管理器。"""
     return InstanceManager(WrapperProxyConfig())
 
 
 @pytest.mark.asyncio
 async def test_instance_manager_initialization(instance_manager):
-    """Test instance manager initialization."""
+    """测试实例管理器初始化。"""
     assert len(instance_manager._instances) == 0
     assert len(instance_manager._username_to_id) == 0
 
 
 @pytest.mark.asyncio
 async def test_add_instance_success(instance_manager):
-    """Test adding instance successfully."""
+    """测试成功添加实例。"""
     with patch.object(WrapperProxy, 'start', new_callable=AsyncMock):
         success, message, instance = await instance_manager.add_instance(
             username="test@example.com",
@@ -194,16 +185,16 @@ async def test_add_instance_success(instance_manager):
 
 @pytest.mark.asyncio
 async def test_add_instance_duplicate(instance_manager):
-    """Test adding duplicate instance."""
+    """测试添加重复实例。"""
     with patch.object(WrapperProxy, 'start', new_callable=AsyncMock):
-        # Add first instance
+        # 添加第一个实例
         await instance_manager.add_instance(
             username="test@example.com",
             password="password123",
             region="us",
         )
 
-        # Try to add duplicate
+        # 尝试添加重复实例
         success, message, instance = await instance_manager.add_instance(
             username="test@example.com",
             password="password123",
@@ -216,10 +207,10 @@ async def test_add_instance_duplicate(instance_manager):
 
 @pytest.mark.asyncio
 async def test_remove_instance(instance_manager):
-    """Test removing instance."""
+    """测试移除实例。"""
     with patch.object(WrapperProxy, 'start', new_callable=AsyncMock):
         with patch.object(WrapperProxy, 'stop', new_callable=AsyncMock):
-            # Add instance
+            # 添加实例
             success, _, instance = await instance_manager.add_instance(
                 username="test@example.com",
                 password="password123",
@@ -227,7 +218,7 @@ async def test_remove_instance(instance_manager):
             )
             instance_id = instance.instance_id
 
-            # Remove instance
+            # 移除实例
             success, message = await instance_manager.remove_instance(instance_id)
 
             assert success is True
@@ -236,9 +227,9 @@ async def test_remove_instance(instance_manager):
 
 @pytest.mark.asyncio
 async def test_get_instance(instance_manager):
-    """Test getting instance by ID."""
+    """测试按 ID 获取实例。"""
     with patch.object(WrapperProxy, 'start', new_callable=AsyncMock):
-        # Add instance
+        # 添加实例
         _, _, instance = await instance_manager.add_instance(
             username="test@example.com",
             password="password123",
@@ -246,7 +237,7 @@ async def test_get_instance(instance_manager):
         )
         instance_id = instance.instance_id
 
-        # Get instance
+        # 获取实例
         retrieved = instance_manager.get_instance(instance_id)
 
         assert retrieved is not None
@@ -255,16 +246,16 @@ async def test_get_instance(instance_manager):
 
 @pytest.mark.asyncio
 async def test_get_instance_by_username(instance_manager):
-    """Test getting instance by username."""
+    """测试按用户名获取实例。"""
     with patch.object(WrapperProxy, 'start', new_callable=AsyncMock):
-        # Add instance
+        # 添加实例
         await instance_manager.add_instance(
             username="test@example.com",
             password="password123",
             region="us",
         )
 
-        # Get instance by username
+        # 按用户名获取实例
         retrieved = instance_manager.get_instance_by_username("test@example.com")
 
         assert retrieved is not None
@@ -273,9 +264,9 @@ async def test_get_instance_by_username(instance_manager):
 
 @pytest.mark.asyncio
 async def test_list_instances(instance_manager):
-    """Test listing all instances."""
+    """测试列出所有实例。"""
     with patch.object(WrapperProxy, 'start', new_callable=AsyncMock):
-        # Add multiple instances
+        # 添加多个实例
         for i in range(3):
             await instance_manager.add_instance(
                 username=f"test{i}@example.com",
@@ -283,7 +274,7 @@ async def test_list_instances(instance_manager):
                 region="us",
             )
 
-        # List instances
+        # 列出实例
         instances = instance_manager.list_instances()
 
         assert len(instances) == 3
@@ -291,9 +282,9 @@ async def test_list_instances(instance_manager):
 
 @pytest.mark.asyncio
 async def test_get_regions(instance_manager):
-    """Test getting available regions."""
+    """测试获取可用地区。"""
     with patch.object(WrapperProxy, 'start', new_callable=AsyncMock):
-        # Add instances in different regions
+        # 添加不同地区的实例
         await instance_manager.add_instance(
             username="test1@example.com",
             password="password123",
@@ -305,7 +296,7 @@ async def test_get_regions(instance_manager):
             region="cn",
         )
 
-        # Get regions
+        # 获取地区
         regions = instance_manager.get_regions()
 
         assert "us" in regions
@@ -314,9 +305,9 @@ async def test_get_regions(instance_manager):
 
 @pytest.mark.asyncio
 async def test_get_client_count(instance_manager):
-    """Test getting active client count."""
+    """测试获取活跃客户端数量。"""
     with patch.object(WrapperProxy, 'start', new_callable=AsyncMock):
-        # Add instances
+        # 添加实例
         for i in range(3):
             await instance_manager.add_instance(
                 username=f"test{i}@example.com",
@@ -324,7 +315,7 @@ async def test_get_client_count(instance_manager):
                 region="us",
             )
 
-        # Get count
+        # 获取数量
         count = instance_manager.get_client_count()
 
         assert count == 3
@@ -332,10 +323,10 @@ async def test_get_client_count(instance_manager):
 
 @pytest.mark.asyncio
 async def test_health_check_all(instance_manager):
-    """Test health check on all instances."""
+    """测试所有实例健康检查。"""
     with patch.object(WrapperProxy, 'start', new_callable=AsyncMock):
         with patch.object(WrapperProxy, 'health_check', new_callable=AsyncMock, return_value=True):
-            # Add instances
+            # 添加实例
             for i in range(3):
                 await instance_manager.add_instance(
                     username=f"test{i}@example.com",
@@ -343,48 +334,44 @@ async def test_health_check_all(instance_manager):
                     region="us",
                 )
 
-            # Health check all
+            # 执行全部健康检查
             results = await instance_manager.health_check_all()
 
             assert len(results) == 3
             assert all(healthy for healthy in results.values())
 
 
-# ============================================================================
-# DecryptDispatcher Tests
-# ============================================================================
-
 @pytest.fixture
 def dispatcher(instance_manager):
-    """Create decrypt dispatcher."""
+    """创建解密调度器。"""
     return DecryptDispatcher(instance_manager)
 
 
 @pytest.mark.asyncio
 async def test_dispatcher_initialization(dispatcher):
-    """Test dispatcher initialization."""
+    """测试调度器初始化。"""
     assert dispatcher.instance_manager is not None
 
 
 @pytest.mark.asyncio
 async def test_dispatcher_select_instance_no_instances(dispatcher):
-    """Test instance selection with no instances."""
+    """测试无实例时的选择逻辑。"""
     instance = await dispatcher._select_instance("123456")
     assert instance is None
 
 
 @pytest.mark.asyncio
 async def test_dispatcher_select_instance_with_instances(instance_manager, dispatcher):
-    """Test instance selection with available instances."""
+    """测试有可用实例时的选择逻辑。"""
     with patch.object(WrapperProxy, 'start', new_callable=AsyncMock):
-        # Add instance
+        # 添加实例
         await instance_manager.add_instance(
             username="test@example.com",
             password="password123",
             region="us",
         )
 
-        # Select instance
+        # 选择实例
         instance = await dispatcher._select_instance("123456")
 
         assert instance is not None
@@ -393,9 +380,9 @@ async def test_dispatcher_select_instance_with_instances(instance_manager, dispa
 
 @pytest.mark.asyncio
 async def test_dispatcher_sticky_routing(instance_manager, dispatcher):
-    """Test sticky routing for same adam_id."""
+    """测试相同 adam_id 的粘性路由。"""
     with patch.object(WrapperProxy, 'start', new_callable=AsyncMock):
-        # Add multiple instances
+        # 添加多个实例
         for i in range(3):
             await instance_manager.add_instance(
                 username=f"test{i}@example.com",
@@ -403,12 +390,12 @@ async def test_dispatcher_sticky_routing(instance_manager, dispatcher):
                 region="us",
             )
 
-        # Select instance for same adam_id twice
+        # 对同一 adam_id 选择两次实例
         instance1 = await dispatcher._select_instance("123456")
         instance1.proxy.set_last_adam_id("123456")
         instance2 = await dispatcher._select_instance("123456")
 
-        # Should be the same instance (sticky routing)
+        # 应为同一实例（粘性路由）
         assert instance1 is not None
         assert instance2 is not None
         assert instance1.instance_id == instance2.instance_id
@@ -416,9 +403,9 @@ async def test_dispatcher_sticky_routing(instance_manager, dispatcher):
 
 @pytest.mark.asyncio
 async def test_dispatcher_load_balancing(instance_manager, dispatcher):
-    """Test load balancing across instances."""
+    """测试多实例负载均衡。"""
     with patch.object(WrapperProxy, 'start', new_callable=AsyncMock):
-        # Add multiple instances
+        # 添加多个实例
         for i in range(3):
             await instance_manager.add_instance(
                 username=f"test{i}@example.com",
@@ -426,32 +413,32 @@ async def test_dispatcher_load_balancing(instance_manager, dispatcher):
                 region="us",
             )
 
-        # Select instances for different adam_ids
+        # 为不同 adam_id 选择实例
         instances = []
         for i in range(10):
             instance = await dispatcher._select_instance(f"adam-{i}")
             instances.append(instance)
 
-        # Check that different instances were used
+        # 验证使用了不同实例
         instance_ids = {inst.instance_id for inst in instances if inst}
-        assert len(instance_ids) > 1  # Should use multiple instances
+        assert len(instance_ids) > 1  # 应使用多个实例
 
 
 @pytest.mark.asyncio
 async def test_dispatcher_dispatch_success(instance_manager, dispatcher):
-    """Test successful task dispatch."""
+    """测试任务分发成功。"""
     with patch.object(WrapperProxy, 'start', new_callable=AsyncMock):
         with patch.object(WrapperProxy, 'decrypt', new_callable=AsyncMock) as mock_decrypt:
             mock_decrypt.return_value = (True, b"decrypted_data", None)
 
-            # Add instance
+            # 添加实例
             await instance_manager.add_instance(
                 username="test@example.com",
                 password="password123",
                 region="us",
             )
 
-            # Create task
+            # 创建任务
             task = DecryptTask(
                 adam_id="123456",
                 key="test_key",
@@ -459,7 +446,7 @@ async def test_dispatcher_dispatch_success(instance_manager, dispatcher):
                 sample_index=0,
             )
 
-            # Dispatch
+            # 分发
             result = await dispatcher.dispatch(task)
 
             assert result.success is True
@@ -469,8 +456,8 @@ async def test_dispatcher_dispatch_success(instance_manager, dispatcher):
 
 @pytest.mark.asyncio
 async def test_dispatcher_dispatch_no_instances(dispatcher):
-    """Test task dispatch with no instances."""
-    # Create task
+    """测试无实例时的任务分发。"""
+    # 创建任务
     task = DecryptTask(
         adam_id="123456",
         key="test_key",
@@ -478,7 +465,7 @@ async def test_dispatcher_dispatch_no_instances(dispatcher):
         sample_index=0,
     )
 
-    # Dispatch
+    # 分发
     result = await dispatcher.dispatch(task)
 
     assert result.success is False

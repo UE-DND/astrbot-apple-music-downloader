@@ -659,7 +659,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    """CLI 主入口。"""
+    """命令行主入口。"""
     parser = _build_parser()
     args = parser.parse_args(argv)
     if not args.command:

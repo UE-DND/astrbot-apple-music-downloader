@@ -1,7 +1,6 @@
 """
-Performance Metrics Collector
-
-Collects and tracks performance metrics for the native wrapper manager.
+性能指标采集器。
+用于统计 wrapper 管理器性能数据。
 """
 
 import time
@@ -17,16 +16,16 @@ logger = get_logger()
 
 
 class MetricType(Enum):
-    """Metric types."""
-    COUNTER = "counter"  # Incremental count
-    GAUGE = "gauge"  # Current value
-    HISTOGRAM = "histogram"  # Distribution of values
-    TIMER = "timer"  # Duration measurements
+    """指标类型。"""
+    COUNTER = "counter"  # 计数
+    GAUGE = "gauge"  # 当前值
+    HISTOGRAM = "histogram"  # 分布
+    TIMER = "timer"  # 耗时
 
 
 @dataclass
 class Metric:
-    """A single metric data point."""
+    """单个指标数据点。"""
     name: str
     type: MetricType
     value: float
@@ -36,7 +35,7 @@ class Metric:
 
 @dataclass
 class PerformanceStats:
-    """Performance statistics for a specific operation."""
+    """单个操作的性能统计。"""
     operation: str
     total_count: int = 0
     success_count: int = 0
@@ -51,89 +50,40 @@ class PerformanceStats:
 
 
 class MetricsCollector:
-    """
-    Collects and aggregates performance metrics.
-
-    Features:
-    - Counter, gauge, histogram, and timer metrics
-    - Automatic aggregation and statistics
-    - Sliding window for recent metrics
-    - Exportable metrics format
-    """
+    """性能指标收集与聚合器。"""
 
     def __init__(self, window_size: int = 1000):
-        """
-        Initialize metrics collector.
-
-        Args:
-            window_size: Size of sliding window for recent metrics
-        """
+        """初始化指标采集器。"""
         self.window_size = window_size
 
-        # Metrics storage
         self._counters: Dict[str, float] = defaultdict(float)
         self._gauges: Dict[str, float] = {}
         self._histograms: Dict[str, deque] = defaultdict(lambda: deque(maxlen=window_size))
         self._timers: Dict[str, List[float]] = defaultdict(list)
 
-        # Operation tracking
         self._operation_stats: Dict[str, PerformanceStats] = {}
 
-        # Metadata
         self._start_time = datetime.now()
 
         logger.info(f"Metrics collector initialized (window_size={window_size})")
 
     def increment_counter(self, name: str, value: float = 1.0, tags: Optional[Dict[str, str]] = None):
-        """
-        Increment a counter metric.
-
-        Args:
-            name: Metric name
-            value: Value to add
-            tags: Optional tags
-        """
+        """递增计数器指标。"""
         key = self._make_key(name, tags)
         self._counters[key] += value
 
     def set_gauge(self, name: str, value: float, tags: Optional[Dict[str, str]] = None):
-        """
-        Set a gauge metric value.
-
-        Args:
-            name: Metric name
-            value: Current value
-            tags: Optional tags
-        """
+        """设置仪表指标值。"""
         key = self._make_key(name, tags)
         self._gauges[key] = value
 
     def record_histogram(self, name: str, value: float, tags: Optional[Dict[str, str]] = None):
-        """
-        Record a histogram value.
-
-        Args:
-            name: Metric name
-            value: Value to record
-            tags: Optional tags
-        """
+        """记录直方图指标。"""
         key = self._make_key(name, tags)
         self._histograms[key].append(value)
 
     def start_timer(self, operation: str) -> 'TimerContext':
-        """
-        Start a timer for an operation.
-
-        Args:
-            operation: Operation name
-
-        Returns:
-            TimerContext for use with context manager
-
-        Example:
-            with metrics.start_timer("decrypt"):
-                await decrypt_sample()
-        """
+        """为操作启动计时器。"""
         return TimerContext(self, operation)
 
     def record_operation(
@@ -142,14 +92,7 @@ class MetricsCollector:
         duration_ms: float,
         success: bool
     ):
-        """
-        Record an operation's performance.
-
-        Args:
-            operation: Operation name
-            duration_ms: Duration in milliseconds
-            success: Whether operation succeeded
-        """
+        """记录操作性能。"""
         if operation not in self._operation_stats:
             self._operation_stats[operation] = PerformanceStats(operation=operation)
 
@@ -165,21 +108,17 @@ class MetricsCollector:
         stats.min_duration_ms = min(stats.min_duration_ms, duration_ms)
         stats.max_duration_ms = max(stats.max_duration_ms, duration_ms)
 
-        # Update average
         stats.avg_duration_ms = stats.total_duration_ms / stats.total_count
 
-        # Store for percentile calculation
         self._timers[operation].append(duration_ms)
 
-        # Keep only recent values
         if len(self._timers[operation]) > self.window_size:
             self._timers[operation] = self._timers[operation][-self.window_size:]
 
-        # Update percentiles
         self._update_percentiles(operation)
 
     def _update_percentiles(self, operation: str):
-        """Update percentile statistics for an operation."""
+        """更新操作的分位数统计。"""
         if operation not in self._timers or not self._timers[operation]:
             return
 
@@ -188,23 +127,22 @@ class MetricsCollector:
 
         stats = self._operation_stats[operation]
 
-        # Calculate percentiles
         stats.p50_duration_ms = sorted_times[int(count * 0.50)]
         stats.p95_duration_ms = sorted_times[int(count * 0.95)]
         stats.p99_duration_ms = sorted_times[int(count * 0.99)]
 
     def get_counter(self, name: str, tags: Optional[Dict[str, str]] = None) -> float:
-        """Get current counter value."""
+        """获取计数器当前值。"""
         key = self._make_key(name, tags)
         return self._counters.get(key, 0.0)
 
     def get_gauge(self, name: str, tags: Optional[Dict[str, str]] = None) -> Optional[float]:
-        """Get current gauge value."""
+        """获取仪表当前值。"""
         key = self._make_key(name, tags)
         return self._gauges.get(key)
 
     def get_histogram_stats(self, name: str, tags: Optional[Dict[str, str]] = None) -> Dict[str, float]:
-        """Get histogram statistics."""
+        """获取直方图统计。"""
         key = self._make_key(name, tags)
         values = self._histograms.get(key, [])
 
@@ -225,20 +163,15 @@ class MetricsCollector:
         }
 
     def get_operation_stats(self, operation: str) -> Optional[PerformanceStats]:
-        """Get performance statistics for an operation."""
+        """获取操作性能统计。"""
         return self._operation_stats.get(operation)
 
     def get_all_operation_stats(self) -> Dict[str, PerformanceStats]:
-        """Get all operation statistics."""
+        """获取全部操作统计。"""
         return dict(self._operation_stats)
 
     def get_summary(self) -> Dict[str, Any]:
-        """
-        Get metrics summary.
-
-        Returns:
-            Dict with all metrics
-        """
+        """获取指标汇总。"""
         uptime = (datetime.now() - self._start_time).total_seconds()
 
         return {
@@ -267,7 +200,7 @@ class MetricsCollector:
         }
 
     def reset(self):
-        """Reset all metrics."""
+        """重置全部指标。"""
         self._counters.clear()
         self._gauges.clear()
         self._histograms.clear()
@@ -277,7 +210,7 @@ class MetricsCollector:
         logger.info("Metrics collector reset")
 
     def _make_key(self, name: str, tags: Optional[Dict[str, str]]) -> str:
-        """Create metric key with tags."""
+        """生成带标签的指标键。"""
         if not tags:
             return name
 
@@ -286,32 +219,26 @@ class MetricsCollector:
 
 
 class TimerContext:
-    """Context manager for timing operations."""
+    """操作计时上下文管理器。"""
 
     def __init__(self, collector: MetricsCollector, operation: str):
-        """
-        Initialize timer context.
-
-        Args:
-            collector: MetricsCollector instance
-            operation: Operation name
-        """
+        """初始化计时上下文。"""
         self.collector = collector
         self.operation = operation
         self.start_time: Optional[float] = None
         self.success = True
 
     def __enter__(self):
-        """Start timer."""
+        """启动计时。"""
         self.start_time = time.perf_counter()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Stop timer and record metric."""
+        """停止计时并记录指标。"""
         if self.start_time is not None:
             duration_ms = (time.perf_counter() - self.start_time) * 1000
 
-            # Record failure if exception occurred
+            # 出现异常则标记失败
             if exc_type is not None:
                 self.success = False
 
@@ -322,16 +249,16 @@ class TimerContext:
             )
 
     def mark_failure(self):
-        """Mark operation as failed."""
+        """标记操作失败。"""
         self.success = False
 
 
-# Global metrics collector instance
+# 全局指标采集器实例
 _global_collector: Optional[MetricsCollector] = None
 
 
 def get_metrics_collector() -> MetricsCollector:
-    """Get global metrics collector instance."""
+    """获取全局指标采集器实例。"""
     global _global_collector
 
     if _global_collector is None:
@@ -341,7 +268,7 @@ def get_metrics_collector() -> MetricsCollector:
 
 
 def reset_metrics_collector():
-    """Reset global metrics collector."""
+    """重置全局指标采集器。"""
     global _global_collector
 
     if _global_collector:

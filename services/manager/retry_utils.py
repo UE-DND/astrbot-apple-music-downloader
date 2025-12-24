@@ -1,7 +1,6 @@
 """
-Retry Utilities
-
-Provides retry decorators and utilities for handling transient failures.
+重试工具。
+提供重试装饰器与异常处理工具。
 """
 
 import asyncio
@@ -15,15 +14,15 @@ logger = get_logger()
 
 
 class RetryStrategy(Enum):
-    """Retry strategy types."""
-    EXPONENTIAL = "exponential"  # Exponential backoff
-    LINEAR = "linear"  # Linear backoff
-    FIXED = "fixed"  # Fixed interval
+    """重试策略类型。"""
+    EXPONENTIAL = "exponential"  # 指数退避
+    LINEAR = "linear"  # 线性退避
+    FIXED = "fixed"  # 固定间隔
 
 
 @dataclass
 class RetryConfig:
-    """Retry configuration."""
+    """重试配置。"""
     max_attempts: int = 3
     initial_delay: float = 1.0
     max_delay: float = 60.0
@@ -37,17 +36,7 @@ T = TypeVar('T')
 
 
 def retry_async(config: Optional[RetryConfig] = None):
-    """
-    Decorator for retrying async functions.
-
-    Args:
-        config: Retry configuration
-
-    Example:
-        @retry_async(RetryConfig(max_attempts=3, initial_delay=1.0))
-        async def my_function():
-            ...
-    """
+    """异步函数重试装饰器。"""
     if config is None:
         config = RetryConfig()
 
@@ -61,7 +50,7 @@ def retry_async(config: Optional[RetryConfig] = None):
                 try:
                     result = await func(*args, **kwargs)
 
-                    # Check if result should trigger retry
+                    # 判断是否需要重试
                     if config.retry_on_result and config.retry_on_result(result):
                         if attempt < config.max_attempts:
                             logger.warning(
@@ -91,7 +80,7 @@ def retry_async(config: Optional[RetryConfig] = None):
                             f"{func.__name__} failed after {config.max_attempts} attempts: {e}"
                         )
 
-            # All attempts exhausted
+            # 已耗尽重试次数
             if last_exception:
                 raise last_exception
 
@@ -101,32 +90,19 @@ def retry_async(config: Optional[RetryConfig] = None):
 
 
 def _calculate_next_delay(current_delay: float, config: RetryConfig) -> float:
-    """
-    Calculate next retry delay based on strategy.
-
-    Args:
-        current_delay: Current delay in seconds
-        config: Retry configuration
-
-    Returns:
-        Next delay in seconds
-    """
+    """根据策略计算下一次重试延迟。"""
     if config.strategy == RetryStrategy.EXPONENTIAL:
         next_delay = current_delay * config.multiplier
     elif config.strategy == RetryStrategy.LINEAR:
         next_delay = current_delay + config.initial_delay
-    else:  # FIXED
+    else:  # 固定间隔
         next_delay = config.initial_delay
 
     return min(next_delay, config.max_delay)
 
 
 class CircuitBreaker:
-    """
-    Circuit breaker pattern implementation.
-
-    Prevents cascading failures by stopping requests when error rate is high.
-    """
+    """断路器模式实现。"""
 
     def __init__(
         self,
@@ -134,24 +110,17 @@ class CircuitBreaker:
         recovery_timeout: float = 60.0,
         expected_exception: type = Exception
     ):
-        """
-        Initialize circuit breaker.
-
-        Args:
-            failure_threshold: Number of failures before opening circuit
-            recovery_timeout: Timeout before attempting recovery (seconds)
-            expected_exception: Exception type to track
-        """
+        """初始化断路器。"""
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
         self.expected_exception = expected_exception
 
         self._failure_count = 0
         self._last_failure_time: Optional[float] = None
-        self._state = "closed"  # closed, open, half_open
+        self._state = "closed"  # closed/open/half_open 状态
 
     def __call__(self, func: Callable[..., Any]) -> Callable[..., Any]:
-        """Decorator to wrap function with circuit breaker."""
+        """为函数添加断路器保护。"""
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
             if self._state == "open":
@@ -173,7 +142,7 @@ class CircuitBreaker:
         return wrapper
 
     def _should_attempt_reset(self) -> bool:
-        """Check if circuit breaker should attempt reset."""
+        """判断是否应尝试恢复。"""
         if self._last_failure_time is None:
             return True
 
@@ -182,7 +151,7 @@ class CircuitBreaker:
         return elapsed >= self.recovery_timeout
 
     def _on_success(self):
-        """Handle successful call."""
+        """处理成功调用。"""
         if self._state == "half_open":
             self._state = "closed"
             logger.info("Circuit breaker closed (recovered)")
@@ -190,7 +159,7 @@ class CircuitBreaker:
         self._failure_count = 0
 
     def _on_failure(self):
-        """Handle failed call."""
+        """处理失败调用。"""
         import time
         self._failure_count += 1
         self._last_failure_time = time.time()
@@ -203,7 +172,7 @@ class CircuitBreaker:
             )
 
     def reset(self):
-        """Manually reset circuit breaker."""
+        """手动重置断路器。"""
         self._failure_count = 0
         self._last_failure_time = None
         self._state = "closed"
@@ -211,9 +180,7 @@ class CircuitBreaker:
 
 
 class ErrorHandler:
-    """
-    Centralized error handling utilities.
-    """
+    """集中式错误处理工具。"""
 
     @staticmethod
     async def handle_with_fallback(
@@ -222,18 +189,7 @@ class ErrorHandler:
         *args,
         **kwargs
     ) -> tuple[bool, Any, Optional[str]]:
-        """
-        Try primary function, fall back to secondary on failure.
-
-        Args:
-            primary: Primary async function to try
-            fallback: Fallback async function
-            *args: Arguments to pass to both functions
-            **kwargs: Keyword arguments to pass to both functions
-
-        Returns:
-            Tuple of (success, result, error_message)
-        """
+        """尝试主函数，失败后回退。"""
         try:
             result = await primary(*args, **kwargs)
             return True, result, None
@@ -256,18 +212,7 @@ class ErrorHandler:
         *args,
         **kwargs
     ) -> tuple[bool, Any, Optional[str]]:
-        """
-        Execute function with timeout.
-
-        Args:
-            func: Async function to execute
-            timeout: Timeout in seconds
-            *args: Arguments to pass to function
-            **kwargs: Keyword arguments to pass to function
-
-        Returns:
-            Tuple of (success, result, error_message)
-        """
+        """带超时执行函数。"""
         try:
             result = await asyncio.wait_for(
                 func(*args, **kwargs),
@@ -287,17 +232,7 @@ class ErrorHandler:
 
     @staticmethod
     def safe_cast(value: Any, cast_type: type, default: Any = None) -> Any:
-        """
-        Safely cast value to type with fallback.
-
-        Args:
-            value: Value to cast
-            cast_type: Type to cast to
-            default: Default value if cast fails
-
-        Returns:
-            Casted value or default
-        """
+        """安全类型转换，失败回退默认值。"""
         try:
             return cast_type(value)
         except (ValueError, TypeError):
@@ -305,16 +240,7 @@ class ErrorHandler:
 
     @staticmethod
     def validate_required_fields(data: dict, required_fields: list) -> tuple[bool, Optional[str]]:
-        """
-        Validate that required fields are present in data.
-
-        Args:
-            data: Dictionary to validate
-            required_fields: List of required field names
-
-        Returns:
-            Tuple of (valid, error_message)
-        """
+        """校验必填字段是否存在。"""
         missing = [field for field in required_fields if field not in data]
 
         if missing:

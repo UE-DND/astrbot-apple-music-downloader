@@ -1,4 +1,4 @@
-"""Album metadata model."""
+"""专辑元数据模型。"""
 from __future__ import annotations
 
 from typing import List, Optional

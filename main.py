@@ -143,7 +143,6 @@ class AppleMusicDownloader(Star):
 
         logger.info("Apple Music Downloader  插件已关闭")
 
-    # ==================== 下载命令 ====================
 
     @filter.command("am", alias={"applemusic", "apple"})
     async def download_music(
@@ -157,7 +156,6 @@ class AppleMusicDownloader(Star):
         async for result in self._download_handler.handle_download(event, url, quality):
             yield result
 
-    # ==================== 队列管理命令 ====================
 
     @filter.command("am_queue", alias={"am队列", "amq"})
     async def show_queue(self, event: AstrMessageEvent):
@@ -182,7 +180,6 @@ class AppleMusicDownloader(Star):
         async for result in self._queue_commands.handle_show_my_tasks(event):
             yield result
 
-    # ==================== 服务管理命令 ====================
 
     @filter.command("am_status", alias={"am状态"})
     async def check_status(self, event: AstrMessageEvent):
@@ -208,7 +205,6 @@ class AppleMusicDownloader(Star):
         async for result in self._service_commands.handle_show_help(event):
             yield result
 
-    # ==================== 文件管理命令 ====================
 
     @filter.command("am_clean", alias={"am清理"})
     async def clean_downloads(self, event: AstrMessageEvent, force: str = ""):
@@ -220,7 +216,6 @@ class AppleMusicDownloader(Star):
         async for result in self.file_manager.handle_clean_command(event, force):
             yield result
 
-    # ==================== 账户管理命令 ====================
 
     @filter.command("am_login", alias={"am登录"})
     async def login_account(self, event: AstrMessageEvent, username: str = "", password: str = ""):

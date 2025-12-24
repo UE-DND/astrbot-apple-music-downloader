@@ -62,7 +62,6 @@ class QueueCommandsHandler:
             yield event.plain_result(f"{'√' if count > 0 else '○'} {msg}")
             return
 
-        # Verify ownership before cancelling
         task = self._plugin._queue.get_task(task_id)
         if not task:
             yield event.plain_result(f"× 未找到任务 {task_id}")

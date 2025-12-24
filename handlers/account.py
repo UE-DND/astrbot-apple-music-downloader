@@ -45,7 +45,6 @@ class AccountHandler:
         """
         user_id = event.get_sender_id()
 
-        # 检查服务状态
         if not self._plugin.wrapper_service or not self._plugin.wrapper_service.is_connected:
             yield event.plain_result("× 服务未连接，请先使用 /am_start 启动服务")
             return
@@ -55,20 +54,15 @@ class AccountHandler:
             yield event.plain_result("× 无法获取服务管理器")
             return
 
-        # 检查是否有待处理的 2FA 验证
         if user_id in self._pending_2fa:
-            # 用户输入可能是 2FA 验证码
             if username and not password:
-                # 单独输入的可能是验证码
                 code = username
                 if code.isdigit() and len(code) == 6:
                     yield event.plain_result(f"... 正在验证 2FA 验证码: {code}")
-                    # 这种情况由 handle_2fa_code 处理
                     async for result in self.handle_2fa_code(event, code):
                         yield result
                     return
 
-        # 交互式登录
         if not username:
             yield event.plain_result(
                 "🔐 Apple Music 账户登录\n"
@@ -87,34 +81,25 @@ class AccountHandler:
             yield event.plain_result("× 请提供密码：/am_login <用户名> <密码>")
             return
 
-        # 开始登录流程
         yield event.plain_result(f"... 正在登录账户: {self._mask_email(username)}")
 
         try:
-            # 定义 2FA 回调
             async def on_2fa(uname: str, pwd: str) -> str:
                 """2FA 验证码回调"""
-                # 存储待验证会话
                 self._pending_2fa[user_id] = {
                     "username": uname,
                     "password": pwd,
                     "event": event,
                 }
 
-                # 向用户发送 2FA 提示
-                # 注意：这里我们不能直接 yield，需要通过其他方式通知用户
                 logger.info(f"2FA required for user {user_id}, username: {self._mask_email(uname)}")
 
-                # 等待用户输入 2FA 验证码
-                # 使用事件等待机制
                 wait_event = asyncio.Event()
                 self._pending_2fa[user_id]["wait_event"] = wait_event
                 self._pending_2fa[user_id]["code"] = None
 
-                # 发送 2FA 提示消息（通过主动推送）
                 await self._send_2fa_prompt(event, uname)
 
-                # 等待验证码（最多 5 分钟）
                 try:
                     await asyncio.wait_for(wait_event.wait(), timeout=300)
                     code = self._pending_2fa[user_id].get("code")
@@ -124,11 +109,9 @@ class AccountHandler:
                 except asyncio.TimeoutError:
                     raise Exception("验证码输入超时")
                 finally:
-                    # 清理会话
                     if user_id in self._pending_2fa:
                         del self._pending_2fa[user_id]
 
-            # 执行登录
             await manager.login(username, password, on_2fa)
 
             yield event.plain_result(
@@ -157,8 +140,6 @@ class AccountHandler:
 
     async def _send_2fa_prompt(self, event: AstrMessageEvent, username: str):
         """发送 2FA 验证提示"""
-        # 通过 AstrBot 的消息机制发送提示
-        # 这里需要使用 context 的 send_message 方法
         msg = (
             "🔐 需要双因素身份验证\n"
             "─" * 25 + "\n"
@@ -169,7 +150,6 @@ class AccountHandler:
             "⏰ 验证码 5 分钟内有效"
         )
         try:
-            # 使用插件的 context 发送消息，需要使用 MessageChain
             message_chain = MessageChain(chain=[Comp.Plain(msg)])
             await self._plugin.context.send_message(
                 event.unified_msg_origin,
@@ -194,7 +174,6 @@ class AccountHandler:
             yield event.plain_result("× 验证码格式错误，请输入 6 位数字")
             return
 
-        # 检查是否有待验证的会话
         if user_id not in self._pending_2fa:
             yield event.plain_result("× 没有待验证的登录会话\n请先使用 /am_login 开始登录")
             return
@@ -202,7 +181,6 @@ class AccountHandler:
         session = self._pending_2fa[user_id]
         session["code"] = code
 
-        # 触发等待事件
         wait_event = session.get("wait_event")
         if wait_event:
             wait_event.set()
@@ -216,7 +194,6 @@ class AccountHandler:
 
         用法: /am_logout <用户名>
         """
-        # 检查服务状态
         if not self._plugin.wrapper_service or not self._plugin.wrapper_service.is_connected:
             yield event.plain_result("× 服务未连接")
             return
@@ -252,7 +229,6 @@ class AccountHandler:
 
         用法: /am_accounts
         """
-        # 检查服务状态
         if not self._plugin.wrapper_service:
             yield event.plain_result("× 服务未初始化")
             return

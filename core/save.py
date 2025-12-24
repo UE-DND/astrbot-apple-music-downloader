@@ -1,8 +1,6 @@
 """
-File Saving Module
-
-
-Handles saving downloaded songs, lyrics, and covers to disk.
+文件保存模块。
+负责保存歌曲、歌词与封面。
 """
 
 import logging
@@ -24,23 +22,10 @@ def save_song(
     config: Any,
     playlist: PlaylistInfo = None
 ) -> str:
-    """
-    Save song to disk.
-
-    Args:
-        song_data: Audio data bytes
-        codec: Audio codec
-        metadata: Song metadata
-        config: Plugin configuration
-        playlist: Optional playlist info
-
-    Returns:
-        Path to saved file
-    """
+    """保存歌曲到本地。"""
     song_name, dir_path = get_song_name_and_dir_path(codec, metadata, config, playlist)
     download_dir = config.get_download_path()
 
-    # Create full path
     full_dir = download_dir / dir_path
     full_dir.mkdir(parents=True, exist_ok=True)
 
@@ -62,27 +47,13 @@ def save_lyrics(
     playlist: PlaylistInfo = None,
     lyrics_format: str = "lrc"
 ) -> Optional[str]:
-    """
-    Save lyrics to disk.
-
-    Args:
-        lyrics: Lyrics content
-        codec: Audio codec (for path generation)
-        metadata: Song metadata
-        config: Plugin configuration
-        playlist: Optional playlist info
-        lyrics_format: Lyrics format (lrc or ttml)
-
-    Returns:
-        Path to saved file or None
-    """
+    """保存歌词到本地。"""
     if not lyrics:
         return None
 
     song_name, dir_path = get_song_name_and_dir_path(codec, metadata, config, playlist)
     download_dir = config.get_download_path()
 
-    # Create full path
     full_dir = download_dir / dir_path
     full_dir.mkdir(parents=True, exist_ok=True)
 
@@ -104,35 +75,19 @@ def save_cover(
     playlist: PlaylistInfo = None,
     cover_format: str = "jpg"
 ) -> Optional[str]:
-    """
-    Save cover art to disk.
-
-    Args:
-        cover_data: Cover image bytes
-        codec: Audio codec (for path generation)
-        metadata: Song metadata
-        config: Plugin configuration
-        playlist: Optional playlist info
-        cover_format: Image format (jpg or png)
-
-    Returns:
-        Path to saved file or None
-    """
+    """保存封面到本地。"""
     if not cover_data:
         return None
 
     song_name, dir_path = get_song_name_and_dir_path(codec, metadata, config, playlist)
     download_dir = config.get_download_path()
 
-    # Create full path
     full_dir = download_dir / dir_path
     full_dir.mkdir(parents=True, exist_ok=True)
 
-    # Use "cover" as filename instead of song name
     suffix = f".{cover_format}"
     file_path = full_dir / Path("cover" + suffix)
 
-    # Only save if cover doesn't exist
     if not file_path.exists():
         with open(file_path, "wb") as f:
             f.write(cover_data)
@@ -150,38 +105,21 @@ def save_all(
     cover: Optional[bytes] = None,
     playlist: PlaylistInfo = None
 ) -> dict:
-    """
-    Save song, lyrics, and cover to disk.
-
-    Args:
-        song_data: Audio data bytes
-        codec: Audio codec
-        metadata: Song metadata
-        config: Plugin configuration
-        lyrics: Optional lyrics content
-        cover: Optional cover image bytes
-        playlist: Optional playlist info
-
-    Returns:
-        Dictionary with paths to saved files
-    """
+    """保存歌曲、歌词与封面。"""
     result = {
         "song": None,
         "lyrics": None,
         "cover": None
     }
 
-    # Save song
     result["song"] = save_song(song_data, codec, metadata, config, playlist)
 
-    # Save lyrics if configured
     if config.download.save_lyrics and lyrics:
         result["lyrics"] = save_lyrics(
             lyrics, codec, metadata, config, playlist,
             config.download.lyrics_format
         )
 
-    # Save cover if configured
     if config.download.save_cover and cover:
         result["cover"] = save_cover(
             cover, codec, metadata, config, playlist,
@@ -197,18 +135,7 @@ def get_output_path(
     config: Any,
     playlist: PlaylistInfo = None
 ) -> str:
-    """
-    Get the expected output path for a song without saving.
-
-    Args:
-        codec: Audio codec
-        metadata: Song metadata
-        config: Plugin configuration
-        playlist: Optional playlist info
-
-    Returns:
-        Expected file path
-    """
+    """获取歌曲预期输出路径（不落盘）。"""
     song_name, dir_path = get_song_name_and_dir_path(codec, metadata, config, playlist)
     download_dir = config.get_download_path()
     suffix = get_suffix(codec, config.download.atmos_convert_to_m4a)

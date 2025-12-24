@@ -1,9 +1,6 @@
 """
-Queue Formatter for Download Queue
-
-
-Provides formatted output for queue status and task information.
-Single responsibility: format data for display.
+下载队列格式化器。
+负责格式化队列状态与任务信息。
 """
 
 from __future__ import annotations
@@ -17,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class QueueFormatter(ABC):
-    """Abstract base for queue formatters."""
+    """队列格式化器抽象基类。"""
 
     @abstractmethod
     def format_queue_status(
@@ -26,12 +23,12 @@ class QueueFormatter(ABC):
         current_task: Optional["DownloadTask"],
         stats: "QueueStats",
     ) -> str:
-        """Format complete queue status."""
+        """格式化完整队列状态。"""
         pass
 
     @abstractmethod
     def format_task_info(self, task: "DownloadTask", position: int = 0) -> str:
-        """Format single task information."""
+        """格式化单个任务信息。"""
         pass
 
     @abstractmethod
@@ -40,18 +37,13 @@ class QueueFormatter(ABC):
         tasks: List["DownloadTask"],
         user_name: str,
     ) -> str:
-        """Format user's tasks."""
+        """格式化用户任务列表。"""
         pass
 
 
 class ChineseFormatter(QueueFormatter):
-    """
-    Chinese language formatter for queue display.
+    """中文队列显示格式化器。"""
 
-    Provides user-friendly formatted output in Chinese.
-    """
-
-    # Status display mapping
     STATUS_DISPLAY = {
         "pending": "等待中",
         "processing": "下载中",
@@ -61,7 +53,6 @@ class ChineseFormatter(QueueFormatter):
         "timeout": "超时",
     }
 
-    # Priority display mapping
     PRIORITY_DISPLAY = {
         "LOW": "低",
         "NORMAL": "普通",
@@ -75,32 +66,19 @@ class ChineseFormatter(QueueFormatter):
         current_task: Optional["DownloadTask"],
         stats: "QueueStats",
     ) -> str:
-        """
-        Format complete queue status.
-
-        Args:
-            tasks: List of pending tasks
-            current_task: Currently processing task (if any)
-            stats: Queue statistics
-
-        Returns:
-            Formatted status string
-        """
+        """格式化完整队列状态。"""
         lines = ["📊 **下载队列状态**", ""]
 
-        # Current task
         if current_task:
             lines.append("🔄 **正在下载：**")
             lines.append(self._format_task_brief(current_task, processing=True))
             lines.append("")
 
-        # Queue summary
         lines.append(f"📋 **队列概览：**")
         lines.append(f"• 队列中任务：{len(tasks)} 个")
         lines.append(f"• 队列容量：{stats.queue_size}/{stats.max_queue_size}")
         lines.append("")
 
-        # Statistics
         if stats.total_tasks > 0:
             lines.append("📈 **统计信息：**")
             lines.append(f"• 总任务数：{stats.total_tasks}")
@@ -116,10 +94,9 @@ class ChineseFormatter(QueueFormatter):
                 lines.append(f"• 吞吐量：{stats.throughput:.1f} 任务/分钟")
             lines.append("")
 
-        # Pending tasks list
         if tasks:
             lines.append("📝 **等待队列：**")
-            for i, task in enumerate(tasks[:10], 1):  # Show max 10 tasks
+            for i, task in enumerate(tasks[:10], 1):
                 lines.append(f"{i}. {self._format_task_brief(task)}")
 
             if len(tasks) > 10:
@@ -130,19 +107,9 @@ class ChineseFormatter(QueueFormatter):
         return "\n".join(lines)
 
     def format_task_info(self, task: "DownloadTask", position: int = 0) -> str:
-        """
-        Format detailed task information.
-
-        Args:
-            task: Task to format
-            position: Position in queue (0 = not in queue)
-
-        Returns:
-            Formatted task string
-        """
+        """格式化任务详情。"""
         lines = [f"🎵 **任务详情** (ID: {task.task_id})", ""]
 
-        # Basic info
         lines.append(f"**URL：** {self._truncate_url(task.url, 40)}")
         lines.append(f"**音质：** {task.quality_display or task.quality}")
         if task.song_name:
@@ -150,7 +117,6 @@ class ChineseFormatter(QueueFormatter):
         lines.append(f"**用户：** {task.user_name}")
         lines.append("")
 
-        # Status
         status_text = self.STATUS_DISPLAY.get(task.status.value, task.status.value)
         status_emoji = self._get_status_emoji(task.status.value)
         lines.append(f"**状态：** {status_emoji} {status_text}")
@@ -162,7 +128,6 @@ class ChineseFormatter(QueueFormatter):
         lines.append(f"**优先级：** {priority_text}")
         lines.append("")
 
-        # Timing
         lines.append("**时间信息：**")
         lines.append(f"• 创建时间：{self._format_timestamp(task.created_at)}")
 
@@ -176,7 +141,6 @@ class ChineseFormatter(QueueFormatter):
         elif task.started_at:
             lines.append(f"• 已处理：{self._format_duration(task.process_time)}")
 
-        # Error info
         if task.error:
             lines.append("")
             lines.append(f"**错误信息：** {task.error}")
@@ -188,16 +152,7 @@ class ChineseFormatter(QueueFormatter):
         tasks: List["DownloadTask"],
         user_name: str,
     ) -> str:
-        """
-        Format user's tasks list.
-
-        Args:
-            tasks: List of user's tasks
-            user_name: User's display name
-
-        Returns:
-            Formatted tasks string
-        """
+        """格式化用户任务列表。"""
         if not tasks:
             return f"📋 **{user_name}** 没有进行中的任务"
 
@@ -207,12 +162,10 @@ class ChineseFormatter(QueueFormatter):
             status_emoji = self._get_status_emoji(task.status.value)
             status_text = self.STATUS_DISPLAY.get(task.status.value, task.status.value)
 
-            # Task line
             task_desc = task.song_name or self._truncate_url(task.url, 30)
             lines.append(f"{i}. {status_emoji} **{task_desc}**")
             lines.append(f"   ID: {task.task_id} | {status_text} | {task.quality}")
 
-            # Show position for pending tasks
             if task.status.value == "pending":
                 lines.append(f"   等待时间：{self._format_duration(task.wait_time)}")
             elif task.status.value == "processing":
@@ -228,17 +181,7 @@ class ChineseFormatter(QueueFormatter):
         position: int,
         queue_size: int,
     ) -> str:
-        """
-        Format task enqueue result.
-
-        Args:
-            task: Enqueued task
-            position: Position in queue
-            queue_size: Current queue size
-
-        Returns:
-            Formatted result string
-        """
+        """格式化任务入队结果。"""
         lines = [
             "✅ **已加入下载队列**",
             "",
@@ -258,30 +201,19 @@ class ChineseFormatter(QueueFormatter):
         success: bool,
         message: str,
     ) -> str:
-        """
-        Format task cancellation result.
-
-        Args:
-            task_id: Cancelled task ID
-            success: Whether cancellation succeeded
-            message: Result message
-
-        Returns:
-            Formatted result string
-        """
+        """格式化任务取消结果。"""
         if success:
             return f"✅ 任务 {task_id} 已取消"
         else:
             return f"❌ 无法取消任务 {task_id}：{message}"
 
-    # ==================== Helper Methods ====================
 
     def _format_task_brief(
         self,
         task: "DownloadTask",
         processing: bool = False,
     ) -> str:
-        """Format brief task description."""
+        """格式化任务简要信息。"""
         desc = task.song_name or self._truncate_url(task.url, 25)
         info_parts = [
             f"ID:{task.task_id}",
@@ -297,7 +229,7 @@ class ChineseFormatter(QueueFormatter):
         return f"**{desc}** ({' | '.join(info_parts)})"
 
     def _format_duration(self, seconds: float) -> str:
-        """Format duration in human-readable form."""
+        """格式化时长。"""
         if seconds < 60:
             return f"{seconds:.0f}秒"
         elif seconds < 3600:
@@ -308,19 +240,19 @@ class ChineseFormatter(QueueFormatter):
             return f"{hours:.1f}小时"
 
     def _format_timestamp(self, timestamp: float) -> str:
-        """Format timestamp to local time string."""
+        """格式化时间戳为本地时间字符串。"""
         import datetime
         dt = datetime.datetime.fromtimestamp(timestamp)
         return dt.strftime("%H:%M:%S")
 
     def _truncate_url(self, url: str, max_length: int = 40) -> str:
-        """Truncate URL for display."""
+        """截断 URL 便于显示。"""
         if len(url) <= max_length:
             return url
         return url[:max_length - 3] + "..."
 
     def _get_status_emoji(self, status: str) -> str:
-        """Get emoji for status."""
+        """获取状态对应的表情。"""
         emoji_map = {
             "pending": "⏳",
             "processing": "🔄",
@@ -333,11 +265,7 @@ class ChineseFormatter(QueueFormatter):
 
 
 class MinimalFormatter(QueueFormatter):
-    """
-    Minimal formatter for compact output.
-
-    Useful for environments with limited display space.
-    """
+    """紧凑输出格式化器。"""
 
     def format_queue_status(
         self,
@@ -345,7 +273,7 @@ class MinimalFormatter(QueueFormatter):
         current_task: Optional["DownloadTask"],
         stats: "QueueStats",
     ) -> str:
-        """Format compact queue status."""
+        """格式化紧凑队列状态。"""
         lines = []
 
         if current_task:
@@ -357,7 +285,7 @@ class MinimalFormatter(QueueFormatter):
         return " | ".join(lines)
 
     def format_task_info(self, task: "DownloadTask", position: int = 0) -> str:
-        """Format compact task info."""
+        """格式化紧凑任务信息。"""
         parts = [
             f"ID:{task.task_id}",
             task.status.value,
@@ -372,7 +300,7 @@ class MinimalFormatter(QueueFormatter):
         tasks: List["DownloadTask"],
         user_name: str,
     ) -> str:
-        """Format compact user tasks."""
+        """格式化紧凑用户任务列表。"""
         if not tasks:
             return f"{user_name}: 无任务"
 
@@ -383,5 +311,4 @@ class MinimalFormatter(QueueFormatter):
         return f"{user_name}: {', '.join(task_strs)}"
 
 
-# Default formatter instance
 default_formatter = ChineseFormatter()

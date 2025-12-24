@@ -3,6 +3,6 @@ Legacy AAC Decryption Module
 For AAC-Legacy mode using Widevine CDM
 """
 
-# Legacy module - implementation will be added in Phase 2
+# 旧版模块，后续阶段补充实现
 
 __all__ = []

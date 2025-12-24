@@ -1,8 +1,6 @@
 """
-MP4 Processing Module
-
-
-Handles M3U8 extraction, audio extraction, encapsulation, and metadata writing.
+MP4 处理模块。
+负责提取、封装与写入元数据。
 """
 
 import os
@@ -30,21 +28,12 @@ from .utils import (
 
 
 class CodecNotFoundException(Exception):
-    """Raised when the requested codec is not available."""
+    """请求的编码不可用时抛出。"""
     pass
 
 
 async def get_available_codecs(m3u8_content: str, m3u8_url: str) -> Tuple[list[str], list[str]]:
-    """
-    Get available codecs from M3U8 playlist.
-
-    Args:
-        m3u8_content: M3U8 playlist content
-        m3u8_url: M3U8 URL for resolving relative URIs
-
-    Returns:
-        Tuple of (codecs, codec_ids)
-    """
+    """从 M3U8 中获取可用编码。"""
     parsed_m3u8 = m3u8.loads(m3u8_content, uri=m3u8_url)
     codec_ids = [playlist.stream_info.audio for playlist in parsed_m3u8.playlists]
     codecs = [get_codec_from_codec_id(codec_id) for codec_id in codec_ids]
@@ -61,29 +50,11 @@ async def extract_media(
     max_sample_rate: int = 192000,
     download_m3u8_func=None
 ) -> Tuple[M3U8Info, str]:
-    """
-    Extract media information from M3U8 playlist.
-
-    Args:
-        m3u8_content: M3U8 playlist content
-        m3u8_url: M3U8 URL
-        codec: Requested codec
-        codec_priority: Priority list for codec alternatives
-        codec_alternative: Whether to try alternative codecs
-        max_bit_depth: Maximum bit depth for ALAC
-        max_sample_rate: Maximum sample rate for ALAC
-        download_m3u8_func: Async function to download M3U8 content
-
-    Returns:
-        Tuple of (M3U8Info, actual_codec)
-
-    Raises:
-        CodecNotFoundException: If no suitable codec found
-    """
+    """从 M3U8 提取媒体信息。"""
     parsed_m3u8 = m3u8.loads(m3u8_content, uri=m3u8_url)
     specify_playlist = find_best_codec(parsed_m3u8, codec, max_bit_depth, max_sample_rate)
 
-    # Try alternative codecs if requested codec not found
+    # 未找到指定编码时尝试降级
     actual_codec = codec
     if not specify_playlist and codec_alternative:
         for a_codec in codec_priority:
@@ -97,18 +68,18 @@ async def extract_media(
 
     selected_codec = specify_playlist.media[0].group_id
 
-    # Download the specific stream M3U8
+    # 下载选中流的 M3U8
     if download_m3u8_func:
         stream_content = await download_m3u8_func(specify_playlist.absolute_uri)
         stream = m3u8.loads(stream_content, uri=specify_playlist.absolute_uri)
     else:
         stream = m3u8.load(specify_playlist.absolute_uri)
 
-    # Extract SKD keys
+    # 提取 SKD 密钥
     skds = [key.uri for key in stream.keys if key.uri and regex.match(r'(skd?://[^"]*)', key.uri)]
     keys = [PREFETCH_KEY]
 
-    # Determine key suffix based on codec
+    # 根据编码选择密钥后缀
     key_suffix = CodecKeySuffix.KeySuffixDefault
     match actual_codec:
         case Codec.ALAC:
@@ -126,7 +97,7 @@ async def extract_media(
         if key.endswith(key_suffix) or key.endswith(CodecKeySuffix.KeySuffixDefault):
             keys.append(key)
 
-    # Get sample rate and bit depth for ALAC
+    # ALAC 需要补充采样率与位深
     if actual_codec == Codec.ALAC:
         sample_rate = int(specify_playlist.media[0].extras.get("sample_rate", 0))
         bit_depth = int(specify_playlist.media[0].extras.get("bit_depth", 0))
@@ -143,16 +114,7 @@ async def extract_media(
 
 
 def extract_song(raw_song: bytes, codec: str) -> SongInfo:
-    """
-    Extract song information and samples from raw MP4 data.
-
-    Args:
-        raw_song: Raw MP4 bytes
-        codec: Audio codec
-
-    Returns:
-        SongInfo with samples and decoder params
-    """
+    """从原始 MP4 数据提取歌曲信息与样本。"""
     tmp_dir = TemporaryDirectory()
     mp4_name = uuid.uuid4().hex
     raw_mp4 = Path(tmp_dir.name) / Path(f"{mp4_name}.mp4")
@@ -163,8 +125,8 @@ def extract_song(raw_song: bytes, codec: str) -> SongInfo:
     nhml_name = (Path(tmp_dir.name) / Path(mp4_name).with_suffix('.nhml')).absolute()
     media_name = (Path(tmp_dir.name) / Path(mp4_name).with_suffix('.media')).absolute()
 
-    # Extract NHML using gpac
-    # Try to find gpac in common locations
+    # 使用 gpac 提取 NHML
+    # 尝试在常见路径查找 gpac
     gpac_cmd = "gpac"
     if os.path.exists(r"C:\Program Files\GPAC\gpac.exe"):
         gpac_cmd = r'"C:\Program Files\GPAC\gpac.exe"'
@@ -176,7 +138,7 @@ def extract_song(raw_song: bytes, codec: str) -> SongInfo:
 
     xml_name = (Path(tmp_dir.name) / Path(mp4_name).with_suffix('.xml')).absolute()
 
-    # Extract ISO info using MP4Box
+    # 使用 MP4Box 提取 ISO 信息
     mp4box_cmd = "MP4Box"
     if os.path.exists(r"C:\Program Files\GPAC\MP4Box.exe"):
         mp4box_cmd = r'"C:\Program Files\GPAC\MP4Box.exe"'
@@ -186,9 +148,9 @@ def extract_song(raw_song: bytes, codec: str) -> SongInfo:
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=if_shell()
     )
 
-    # Find mp4extract (Bento4 tool)
+    # 查找 mp4extract（Bento4 工具）
     mp4extract_cmd = "mp4extract"
-    # Check common locations for Bento4
+    # 检查 Bento4 常见路径
     bento4_paths = [
         Path(__file__).parent.parent / "binaries" / "bento4" / "Bento4-SDK-1-6-0-641.x86_64-microsoft-win32" / "bin" / "mp4extract.exe",
         Path(r"C:\Program Files\Bento4\mp4extract.exe"),
@@ -211,7 +173,7 @@ def extract_song(raw_song: bytes, codec: str) -> SongInfo:
     with open(media_name, "rb") as f:
         media = BytesIO(f.read())
 
-    # Extract decoder params based on codec
+    # 按编码提取解码参数
     match codec:
         case Codec.ALAC:
             alac_atom_name = (Path(tmp_dir.name) / Path(mp4_name).with_suffix('.atom')).absolute()
@@ -231,7 +193,7 @@ def extract_song(raw_song: bytes, codec: str) -> SongInfo:
             with open(alac_atom_name, "rb") as f:
                 decoder_params = f.read()
             print(f"[DEBUG extract_song] decoderParams length: {len(decoder_params)} bytes")
-            # Print first 48 bytes in hex for analysis
+            # 输出前 48 字节十六进制用于排查
             print(f"[DEBUG extract_song] decoderParams hex (first 48): {decoder_params[:48].hex()}")
 
         case Codec.AAC | Codec.AAC_DOWNMIX | Codec.AAC_BINAURAL | Codec.AAC_LEGACY:
@@ -240,7 +202,7 @@ def extract_song(raw_song: bytes, codec: str) -> SongInfo:
                 with open(info_name, "rb") as f:
                     decoder_params = f.read()
 
-    # Parse samples
+    # 解析样本
     samples = []
     moofs = info_xml.find_all("MovieFragmentBox")
     nhnt_sample_number = 0
@@ -266,7 +228,7 @@ def extract_song(raw_song: bytes, codec: str) -> SongInfo:
                 duration = int(nhnt_sample.get("duration"))
                 samples.append(SampleInfo(descIndex=index, data=sample_data, duration=duration))
 
-    # Extract timing params
+    # 解析时间参数
     mvhd = info_xml.find("MovieHeaderBox")
     if mvhd:
         params.update({
@@ -287,17 +249,7 @@ def extract_song(raw_song: bytes, codec: str) -> SongInfo:
 
 
 def encapsulate(song_info: SongInfo, decrypted_media: bytes, atmos_convert: bool) -> bytes:
-    """
-    Encapsulate decrypted media into proper container format.
-
-    Args:
-        song_info: Song information with codec and params
-        decrypted_media: Decrypted audio data
-        atmos_convert: Whether to convert Atmos to M4A
-
-    Returns:
-        Encapsulated audio bytes
-    """
+    """封装解密后的媒体数据。"""
     tmp_dir = TemporaryDirectory()
     name = uuid.uuid4().hex
     media = Path(tmp_dir.name) / Path(name).with_suffix(".media")
@@ -307,7 +259,7 @@ def encapsulate(song_info: SongInfo, decrypted_media: bytes, atmos_convert: bool
 
     song_name = Path(tmp_dir.name) / Path(name).with_suffix(get_suffix(song_info.codec, atmos_convert))
 
-    # Find GPAC tools (gpac.exe on Windows)
+    # 查找 GPAC 工具（Windows 为 gpac.exe）
     gpac_cmd = "gpac"
     gpac_paths = [
         Path(r"C:\Program Files\GPAC\gpac.exe"),
@@ -318,7 +270,7 @@ def encapsulate(song_info: SongInfo, decrypted_media: bytes, atmos_convert: bool
             gpac_cmd = f'"{gpac_path}"'
             break
 
-    # Find Bento4 mp4edit tool
+    # 查找 Bento4 的 mp4edit 工具
     mp4edit_cmd = "mp4edit"
     bento4_paths = [
         Path(__file__).parent.parent / "binaries" / "bento4" / "Bento4-SDK-1-6-0-641.x86_64-microsoft-win32" / "bin" / "mp4edit.exe",
@@ -408,7 +360,7 @@ def encapsulate(song_info: SongInfo, decrypted_media: bytes, atmos_convert: bool
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=if_shell()
             )
 
-    # Find MP4Box tool
+    # 查找 MP4Box 工具
     mp4box_cmd = "MP4Box"
     mp4box_paths = [
         Path(r"C:\Program Files\GPAC\mp4box.exe"),
@@ -419,7 +371,7 @@ def encapsulate(song_info: SongInfo, decrypted_media: bytes, atmos_convert: bool
             mp4box_cmd = f'"{mp4box_path}"'
             break
 
-    # Set M4A brand
+    # 设置 M4A 标识
     if not if_raw_atmos(song_info.codec, atmos_convert):
         subprocess.run(
             f'{mp4box_cmd} -brand "M4A " -ab "M4A " -ab "mp42" {song_name.absolute()}',
@@ -440,19 +392,7 @@ def write_metadata(
     cover_format: str,
     params: dict[str, Any]
 ) -> bytes:
-    """
-    Write metadata tags to M4A file.
-
-    Args:
-        song: Audio bytes
-        metadata: Song metadata
-        embed_metadata: List of fields to embed
-        cover_format: Cover image format
-        params: Additional params (CreationTime, ModificationTime)
-
-    Returns:
-        Audio bytes with embedded metadata
-    """
+    """写入 M4A 元数据。"""
     tmp_dir = TemporaryDirectory()
     name = uuid.uuid4().hex
     song_name = Path(tmp_dir.name) / Path(f"{name}.m4a")
@@ -460,7 +400,7 @@ def write_metadata(
     with open(song_name.absolute(), "wb") as f:
         f.write(song)
 
-    # Set creation/modification time using MP4Box
+    # 使用 MP4Box 设置创建/修改时间
     creation_time = params.get("CreationTime")
     modification_time = params.get("ModificationTime")
 
@@ -476,7 +416,7 @@ def write_metadata(
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
 
-    # Write metadata using mutagen
+    # 使用 mutagen 写入元数据
     mp4 = mutagen.mp4.Open(song_name.absolute())
     mp4.update(metadata.to_mutagen_tags(embed_metadata))
     mp4.save()
@@ -489,18 +429,7 @@ def write_metadata(
 
 
 def fix_encapsulate(song: bytes) -> bytes:
-    """
-    Fix M4A encapsulation issues using FFmpeg.
-
-    Some M4A files encapsulated by MP4Box/GPAC have metadata issues
-    that prevent proper playback on some devices.
-
-    Args:
-        song: Audio bytes
-
-    Returns:
-        Fixed audio bytes
-    """
+    """使用 FFmpeg 修复 M4A 封装问题。"""
     tmp_dir = TemporaryDirectory()
     name = uuid.uuid4().hex
     song_name = Path(tmp_dir.name) / Path(f"{name}.m4a")
@@ -524,13 +453,13 @@ def fix_encapsulate(song: bytes) -> bytes:
     print(f"[DEBUG fix_encapsulate] FFmpeg return code: {result.returncode}")
     if result.stderr:
         stderr_text = result.stderr.decode('utf-8', errors='ignore')
-        # Check for ALAC related errors
+        # 检查 ALAC 相关错误
         if 'alac' in stderr_text.lower() or 'invalid' in stderr_text.lower():
             print(f"[DEBUG fix_encapsulate] FFmpeg stderr (ALAC related): {stderr_text[:1000]}")
 
     if not new_song_name.exists():
         print(f"[DEBUG fix_encapsulate] ERROR: Output file not created!")
-        # Return original if FFmpeg failed
+        # FFmpeg 失败时返回原始数据
         tmp_dir.cleanup()
         return song
 
@@ -544,19 +473,7 @@ def fix_encapsulate(song: bytes) -> bytes:
 
 
 def fix_esds_box(raw_song: bytes, song: bytes) -> bytes:
-    """
-    Fix ESDS box in AAC files after FFmpeg processing.
-
-    FFmpeg may overwrite maxBitrate in DecoderConfigDescriptor.
-    This function restores the original ESDS box.
-
-    Args:
-        raw_song: Original encrypted song bytes
-        song: Processed song bytes
-
-    Returns:
-        Fixed audio bytes
-    """
+    """修复 AAC 文件中的 ESDS box。"""
     tmp_dir = TemporaryDirectory()
     name = uuid.uuid4().hex
     esds_name = Path(tmp_dir.name) / Path(f"{name}.atom")
@@ -569,7 +486,7 @@ def fix_esds_box(raw_song: bytes, song: bytes) -> bytes:
     with open(song_name.absolute(), "wb") as f:
         f.write(song)
 
-    # Find mp4extract and mp4edit (Bento4 tools)
+    # 查找 mp4extract 与 mp4edit（Bento4 工具）
     mp4extract_cmd = "mp4extract"
     mp4edit_cmd = "mp4edit"
     bento4_bin_paths = [
@@ -585,13 +502,13 @@ def fix_esds_box(raw_song: bytes, song: bytes) -> bytes:
             mp4edit_cmd = f'"{mp4edit_path}"'
             break
 
-    # Extract original ESDS box
+    # 提取原始 ESDS box
     subprocess.run(
         f"{mp4extract_cmd} moov/trak/mdia/minf/stbl/stsd/enca[0]/esds {raw_song_name.absolute()} {esds_name.absolute()}",
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=if_shell()
     )
 
-    # Replace ESDS box in processed file
+    # 替换处理后文件中的 ESDS box
     subprocess.run(
         f"{mp4edit_cmd} --replace moov/trak/mdia/minf/stbl/stsd/mp4a/esds:{esds_name.absolute()} "
         f"{song_name.absolute()} {final_song_name.absolute()}",
@@ -606,15 +523,7 @@ def fix_esds_box(raw_song: bytes, song: bytes) -> bytes:
 
 
 def check_song_integrity(song: bytes) -> bool:
-    """
-    Check if the song file is valid using FFmpeg.
-
-    Args:
-        song: Audio bytes
-
-    Returns:
-        True if file is valid
-    """
+    """使用 FFmpeg 校验歌曲文件完整性。"""
     tmp_dir = TemporaryDirectory()
     name = uuid.uuid4().hex
     song_name = Path(tmp_dir.name) / Path(f"{name}.m4a")
@@ -622,7 +531,7 @@ def check_song_integrity(song: bytes) -> bool:
     with open(song_name.absolute(), "wb") as f:
         f.write(song)
 
-    # Use /dev/null on Unix, NUL on Windows
+    # Unix 使用 /dev/null，Windows 使用 NUL
     null_device = "NUL" if not if_shell() else "/dev/null"
 
     output = subprocess.run(

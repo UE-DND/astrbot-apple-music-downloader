@@ -1,6 +1,5 @@
 """
-Apple Music Downloader Core Types
-
+Apple Music Downloader 核心类型。
 """
 
 from typing import Optional, Any, Callable, Awaitable
@@ -8,13 +7,12 @@ from typing import Optional, Any, Callable, Awaitable
 from pydantic import BaseModel
 
 
-# Default constants
 DEFAULT_ID = "0"
 PREFETCH_KEY = "skd://itunes.apple.com/P000000000/s1/e1"
 
 
 class ParentDoneHandler:
-    """Handler for tracking parent task completion."""
+    """父任务完成计数器回调处理器。"""
     count: int
     callback: Callable[[], Awaitable[None]]
 
@@ -29,14 +27,14 @@ class ParentDoneHandler:
 
 
 class SampleInfo(BaseModel):
-    """Audio sample information."""
+    """音频采样信息。"""
     data: bytes
     duration: int
     descIndex: int
 
 
 class SongInfo(BaseModel):
-    """Song information with audio data."""
+    """包含音频数据的歌曲信息。"""
     codec: str
     raw: bytes
     samples: list[SampleInfo]
@@ -46,7 +44,7 @@ class SongInfo(BaseModel):
 
 
 class M3U8Info(BaseModel):
-    """M3U8 stream information."""
+    """流信息（M3U8）。"""
     uri: str
     keys: list[str]
     codec_id: str
@@ -55,7 +53,7 @@ class M3U8Info(BaseModel):
 
 
 class Codec:
-    """Supported audio codec identifiers."""
+    """支持的音频编码标识。"""
     ALAC = "alac"
     EC3 = "ec3"
     AC3 = "ac3"
@@ -66,7 +64,7 @@ class Codec:
 
 
 class CodecKeySuffix:
-    """Key suffixes for different codecs."""
+    """不同编码的密钥后缀。"""
     KeySuffixAtmos = "c24"
     KeySuffixAlac = "c23"
     KeySuffixAAC = "c22"
@@ -76,7 +74,7 @@ class CodecKeySuffix:
 
 
 class CodecRegex:
-    """Regex patterns for codec identification."""
+    """编码识别正则。"""
     RegexCodecAtmos = r"audio-(atmos|ec3)-\d{4}$"
     RegexCodecAC3 = r"audio-ac3-\d{3}$"
     RegexCodecAlac = r"audio-alac-stereo-\d{5,6}-\d{2}$"
@@ -86,7 +84,7 @@ class CodecRegex:
 
     @classmethod
     def get_pattern_by_codec(cls, codec: str) -> Optional[str]:
-        """Get regex pattern for a specific codec."""
+        """获取指定编码的正则模式。"""
         codec_pattern_mapping = {
             Codec.ALAC: cls.RegexCodecAlac,
             Codec.EC3: cls.RegexCodecAtmos,

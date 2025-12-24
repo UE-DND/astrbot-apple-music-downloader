@@ -1,5 +1,5 @@
 """
-gRPC Module for Apple Music Downloader
+Apple Music Downloader gRPC 模块。
 """
 
 from .manager import WrapperManager, WrapperManagerException

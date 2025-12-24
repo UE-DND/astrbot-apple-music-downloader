@@ -1,8 +1,6 @@
 """
-Decrypt Dispatcher
-
-Routes decryption tasks to appropriate wrapper instances using smart selection strategies.
-Implements the same logic as the Go implementation for compatibility.
+解密调度器。
+按策略路由解密任务到合适实例。
 """
 
 import asyncio
@@ -19,7 +17,7 @@ from .instance_manager import InstanceManager, WrapperInstance
 
 @dataclass
 class DecryptTask:
-    """Decryption task."""
+    """解密任务。"""
     adam_id: str
     key: str
     sample: bytes
@@ -29,7 +27,7 @@ class DecryptTask:
 
 @dataclass
 class DecryptResult:
-    """Decryption result."""
+    """解密结果。"""
     success: bool
     data: bytes
     error: Optional[str] = None
@@ -37,38 +35,16 @@ class DecryptResult:
 
 
 class DecryptDispatcher:
-    """
-    Decryption task dispatcher.
-
-    Routes decryption tasks to the most suitable wrapper instance
-    using smart selection strategies:
-    1. Sticky routing: Reuse instance that processed the same adam_id
-    2. Fresh instance: Select idle instance for new songs
-    3. Region matching: Prefer instances in the same region
-    4. Load balancing: Random selection among candidates
-    """
+    """解密任务调度器。"""
 
     def __init__(self, instance_manager: InstanceManager):
-        """
-        Initialize dispatcher.
-
-        Args:
-            instance_manager: Instance manager
-        """
+        """初始化调度器。"""
         self.instance_manager = instance_manager
         self._lock = asyncio.Lock()
 
     async def dispatch(self, task: DecryptTask) -> DecryptResult:
-        """
-        Dispatch decryption task.
-
-        Args:
-            task: Decryption task
-
-        Returns:
-            DecryptResult
-        """
-        # Select instance
+        """分发解密任务。"""
+        # 选择实例
         instance = await self._select_instance(task.adam_id)
 
         if not instance:
@@ -87,10 +63,10 @@ class DecryptDispatcher:
                 error="实例代理未初始化"
             )
 
-        # Update instance last used time
+        # 更新实例最近使用时间
         instance.update_last_used()
 
-        # Execute decryption
+        # 执行解密
         try:
             success, decrypted_data, error = await instance.proxy.decrypt(
                 adam_id=task.adam_id,
@@ -127,30 +103,17 @@ class DecryptDispatcher:
             )
 
     async def _select_instance(self, adam_id: str) -> Optional[WrapperInstance]:
-        """
-        Select the best instance for decryption.
-
-        Selection strategy (same as Go implementation):
-        1. If an instance recently processed this adam_id, reuse it (sticky routing)
-        2. Otherwise, select an idle instance (empty last_adam_id)
-        3. Otherwise, random selection among all active instances
-
-        Args:
-            adam_id: Song ID
-
-        Returns:
-            Selected WrapperInstance or None
-        """
+        """选择最合适的解密实例。"""
         async with self._lock:
             instances = self.instance_manager.list_instances()
 
-            # Filter active instances
+            # 过滤可用实例
             active_instances = [inst for inst in instances if inst.is_active()]
 
             if not active_instances:
                 return None
 
-            # Strategy 1: Find instance that processed this adam_id recently
+            # 策略 1：复用最近处理过该 adam_id 的实例
             for instance in active_instances:
                 if instance.proxy and instance.proxy.get_last_adam_id() == adam_id:
                     logger.debug(
@@ -158,23 +121,21 @@ class DecryptDispatcher:
                     )
                     return instance
 
-            # Strategy 2: Find idle instance (no recent adam_id)
+            # 策略 2：选择空闲实例（无最近 adam_id）
             idle_instances = [
                 inst for inst in active_instances
                 if inst.proxy and inst.proxy.get_last_adam_id() == ""
             ]
 
             if idle_instances:
-                # Check region matching if applicable
-                # TODO: Implement region-based filtering
+                # 可按地区匹配（待实现）
                 selected = random.choice(idle_instances)
                 logger.debug(
                     f"Selected idle instance {selected.instance_id} for {adam_id}"
                 )
                 return selected
 
-            # Strategy 3: Random selection among all active instances
-            # TODO: Implement region-based filtering
+            # 策略 3：在全部可用实例中随机选择（地区过滤待实现）
             selected = random.choice(active_instances)
             logger.debug(
                 f"Selected random instance {selected.instance_id} for {adam_id}"
@@ -186,30 +147,13 @@ class DecryptDispatcher:
         adam_id: str,
         region: str
     ) -> bool:
-        """
-        Check if a song is available in a given region.
-
-        This is a simplified implementation. The full version would
-        query Apple Music API or maintain a cache.
-
-        Args:
-            adam_id: Song ID
-            region: Region code
-
-        Returns:
-            True if available (currently always returns True)
-        """
-        # TODO: Implement actual region check
-        # For now, assume all songs are available in all regions
+        """检查歌曲在地区内的可用性。"""
+        # TODO：实现真实的地区可用性校验
+        # 目前假定所有地区均可用
         return True
 
     async def get_statistics(self) -> dict:
-        """
-        Get dispatcher statistics.
-
-        Returns:
-            Statistics dictionary
-        """
+        """获取调度器统计信息。"""
         instances = self.instance_manager.list_instances()
         active_count = sum(1 for inst in instances if inst.is_active())
 

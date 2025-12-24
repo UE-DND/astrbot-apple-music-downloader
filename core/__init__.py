@@ -13,7 +13,6 @@ including:
 - Download workflow management
 """
 
-# Types and constants
 from .types import (
     Codec,
     CodecKeySuffix,
@@ -26,10 +25,8 @@ from .types import (
     PREFETCH_KEY,
 )
 
-# gRPC client
 from .grpc import WrapperManager, WrapperManagerException
 
-# Data models
 from .models import (
     SongData,
     AlbumMeta,
@@ -44,7 +41,6 @@ from .models import (
     TracksMeta,
 )
 
-# URL parsing
 from .url import (
     AppleMusicURL,
     Song,
@@ -54,10 +50,8 @@ from .url import (
     URLType,
 )
 
-# API client
 from .api import WebAPI
 
-# Configuration
 from .config import (
     PluginConfig,
     WrapperConfig,
@@ -69,10 +63,8 @@ from .config import (
     FileConfig,
 )
 
-# Metadata
 from .metadata import SongMetadata
 
-# MP4 processing
 from .mp4 import (
     extract_media,
     extract_song,
@@ -85,7 +77,6 @@ from .mp4 import (
     CodecNotFoundException,
 )
 
-# Download core
 from .rip import (
     rip_song,
     get_song_info,
@@ -95,7 +86,6 @@ from .rip import (
     DownloadConfig as RipDownloadConfig,
 )
 
-# File saving
 from .save import (
     save_song,
     save_lyrics,
@@ -104,7 +94,6 @@ from .save import (
     get_output_path,
 )
 
-# Utilities
 from .utils import (
     ttml_convent,
     get_valid_filename,
@@ -119,7 +108,6 @@ from .utils import (
 
 
 __all__ = [
-    # Types
     "Codec",
     "CodecKeySuffix",
     "CodecRegex",
@@ -129,10 +117,8 @@ __all__ = [
     "ParentDoneHandler",
     "DEFAULT_ID",
     "PREFETCH_KEY",
-    # gRPC
     "WrapperManager",
     "WrapperManagerException",
-    # Models
     "SongData",
     "AlbumMeta",
     "Tracks",
@@ -144,16 +130,13 @@ __all__ = [
     "PlaylistTracks",
     "SongLyrics",
     "TracksMeta",
-    # URL
     "AppleMusicURL",
     "Song",
     "Album",
     "Playlist",
     "Artist",
     "URLType",
-    # API
     "WebAPI",
-    # Config
     "PluginConfig",
     "WrapperConfig",
     "QueueConfig",
@@ -162,9 +145,7 @@ __all__ = [
     "MetadataConfig",
     "PathConfig",
     "FileConfig",
-    # Metadata
     "SongMetadata",
-    # MP4
     "extract_media",
     "extract_song",
     "encapsulate",
@@ -174,20 +155,17 @@ __all__ = [
     "check_song_integrity",
     "get_available_codecs",
     "CodecNotFoundException",
-    # Rip
     "rip_song",
     "get_song_info",
     "DownloadTask",
     "DownloadStatus",
     "DownloadResult",
     "RipDownloadConfig",
-    # Save
     "save_song",
     "save_lyrics",
     "save_cover",
     "save_all",
     "get_output_path",
-    # Utils
     "ttml_convent",
     "get_valid_filename",
     "get_codec_from_codec_id",

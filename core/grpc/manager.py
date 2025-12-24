@@ -1,6 +1,6 @@
 """
-gRPC Wrapper Manager Client
- - Adapted for AstrBot plugin
+gRPC Wrapper 管理器客户端。
+适配 AstrBot 插件。
 """
 
 import asyncio
@@ -50,27 +50,19 @@ from .manager_pb2 import (
 from .manager_pb2_grpc import WrapperManagerServiceStub, google_dot_protobuf_dot_empty__pb2
 
 
-# Logger for this module
+# 模块日志
 logger = logging.getLogger(__name__)
 
 
 class WrapperManagerException(Exception):
-    """Exception raised by WrapperManager operations."""
+    """操作异常（WrapperManager）。"""
     def __init__(self, msg: str):
         self.msg = msg
         super().__init__(msg)
 
 
 class WrapperManager:
-    """
-    gRPC client for Wrapper Manager service.
-
-    Handles communication with the Apple Music wrapper service for:
-    - M3U8 stream retrieval
-    - Audio decryption
-    - Lyrics fetching
-    - License acquisition
-    """
+    """用于 Wrapper Manager 的 gRPC 客户端。"""
 
     _channel: Channel
     _stub: WrapperManagerServiceStub
@@ -86,16 +78,7 @@ class WrapperManager:
         self._initialized = False
 
     async def init(self, url: str, secure: bool = False) -> "WrapperManager":
-        """
-        Initialize the gRPC connection.
-
-        Args:
-            url: The wrapper manager service URL (e.g., "127.0.0.1:8080")
-            secure: Whether to use TLS/SSL
-
-        Returns:
-            Self for method chaining
-        """
+        """初始化 gRPC 连接。"""
         service_config_json = json.dumps(
             {
                 "methodConfig": [
@@ -127,19 +110,17 @@ class WrapperManager:
         return self
 
     async def close(self):
-        """Close the gRPC channel and cancel background tasks."""
-        # Cancel all background tasks
+        """关闭 gRPC 通道并取消后台任务。"""
         for task in self._background_tasks:
             task.cancel()
         self._background_tasks.clear()
 
-        # Close channel if initialized
         if self._initialized and hasattr(self, '_channel'):
             await self._channel.close()
             self._initialized = False
 
     def _safely_create_task(self, coro):
-        """Create a task and track it for cleanup."""
+        """创建任务并纳入清理跟踪。"""
         loop = asyncio.get_event_loop()
         task = loop.create_task(coro)
         self._background_tasks.add(task)
@@ -156,15 +137,7 @@ class WrapperManager:
 
     @alru_cache
     async def status(self) -> StatusData:
-        """
-        Get the status of the wrapper manager service.
-
-        Returns:
-            StatusData containing service status, regions, and client count
-
-        Raises:
-            WrapperManagerException: If the request fails
-        """
+        """获取 wrapper 服务状态。"""
         resp: StatusReply = await self._stub.Status(google_dot_protobuf_dot_empty__pb2.Empty())
         if resp.header.code != 0:
             raise WrapperManagerException(resp.header.msg)
@@ -176,17 +149,7 @@ class WrapperManager:
         password: str,
         on_2fa: Callable[[str, str], Awaitable[str]]
     ):
-        """
-        Login to Apple Music account.
-
-        Args:
-            username: Apple ID username
-            password: Apple ID password
-            on_2fa: Callback for 2FA code input
-
-        Raises:
-            WrapperManagerException: If login fails
-        """
+        """登录 Apple Music 账户。"""
         await self._login_lock.acquire()
 
         login_queue: asyncio.Queue = asyncio.Queue()
@@ -229,15 +192,7 @@ class WrapperManager:
             self._login_lock.release()
 
     async def decrypt(self, adam_id: str, key: str, sample: bytes, sample_index: int):
-        """
-        Queue a sample for decryption.
-
-        Args:
-            adam_id: Apple Music track ID
-            key: Decryption key
-            sample: Encrypted audio sample
-            sample_index: Index of the sample
-        """
+        """将样本加入解密队列。"""
         await self._decrypt_queue.put(
             DecryptRequest(
                 data=DecryptData(
@@ -250,7 +205,7 @@ class WrapperManager:
         )
 
     async def _decrypt_request_generator(self):
-        """Generator for decrypt requests from the queue."""
+        """从队列生成解密请求。"""
         while True:
             yield await self._decrypt_queue.get()
 
@@ -259,18 +214,10 @@ class WrapperManager:
         on_success: Callable[[str, str, bytes, int], Awaitable[None]],
         on_failure: Callable[[str, str, bytes, int], Awaitable[None]],
     ):
-        """
-        Initialize the decryption stream.
-
-        Args:
-            on_success: Callback for successful decryption
-            on_failure: Callback for failed decryption
-        """
-        # Create stream handler task
+        """初始化解密流。"""
         async def handle_stream():
             try:
                 stream = self._stub.Decrypt(self._decrypt_request_generator())
-                # Start keepalive task
                 self._safely_create_task(self._decrypt_keepalive())
 
                 async for reply in stream:
@@ -301,12 +248,11 @@ class WrapperManager:
             except Exception as e:
                 logger.error(f"[Decrypt] Unexpected error: {e}", exc_info=True)
 
-        # Start stream handler in background
         self._safely_create_task(handle_stream())
         logger.info("[Decrypt] Stream initialized")
 
     async def _decrypt_keepalive(self):
-        """Send periodic keepalive messages to maintain the decrypt stream."""
+        """定时发送保活消息。"""
         while True:
             await self._decrypt_queue.put(
                 DecryptRequest(data=DecryptData(adam_id="KEEPALIVE"))
@@ -323,18 +269,7 @@ class WrapperManager:
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
     async def m3u8(self, adam_id: str) -> str:
-        """
-        Get the M3U8 playlist for a track.
-
-        Args:
-            adam_id: Apple Music track ID
-
-        Returns:
-            M3U8 playlist content
-
-        Raises:
-            WrapperManagerException: If the request fails
-        """
+        """获取歌曲 M3U8 内容。"""
         resp: M3U8Reply = await self._stub.M3U8(
             M3U8Request(data=M3U8DataRequest(adam_id=adam_id))
         )
@@ -352,15 +287,7 @@ class WrapperManager:
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
     async def logout(self, username: str):
-        """
-        Logout from Apple Music account.
-
-        Args:
-            username: Apple ID username
-
-        Raises:
-            WrapperManagerException: If logout fails
-        """
+        """登出 Apple Music 账户。"""
         resp: LogoutReply = await self._stub.Logout(
             LogoutRequest(data=LogoutData(username=username))
         )
@@ -377,20 +304,7 @@ class WrapperManager:
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
     async def lyrics(self, adam_id: str, language: str, region: str) -> str:
-        """
-        Get lyrics for a track.
-
-        Args:
-            adam_id: Apple Music track ID
-            language: Language code (e.g., "en-US")
-            region: Region code (e.g., "us")
-
-        Returns:
-            Lyrics content (TTML format)
-
-        Raises:
-            WrapperManagerException: If the request fails
-        """
+        """获取歌曲歌词。"""
         resp: LyricsReply = await self._stub.Lyrics(
             LyricsRequest(
                 data=LyricsDataRequest(adam_id=adam_id, language=language, region=region)
@@ -410,18 +324,7 @@ class WrapperManager:
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
     async def web_playback(self, adam_id: str) -> str:
-        """
-        Get web playback M3U8 for a track (AAC-Legacy mode).
-
-        Args:
-            adam_id: Apple Music track ID
-
-        Returns:
-            M3U8 playlist content
-
-        Raises:
-            WrapperManagerException: If the request fails
-        """
+        """获取 WebPlayback M3U8（AAC-Legacy）。"""
         resp: WebPlaybackReply = await self._stub.WebPlayback(
             WebPlaybackRequest(data=WebPlaybackDataRequest(adam_id=adam_id))
         )
@@ -439,20 +342,7 @@ class WrapperManager:
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
     async def license(self, adam_id: str, challenge: str, kid: str) -> str:
-        """
-        Get Widevine license for a track.
-
-        Args:
-            adam_id: Apple Music track ID
-            challenge: License challenge
-            kid: Key ID
-
-        Returns:
-            License response
-
-        Raises:
-            WrapperManagerException: If the request fails
-        """
+        """获取 Widevine License。"""
         resp: LicenseReply = await self._stub.License(
             LicenseRequest(
                 data=LicenseDataRequest(adam_id=adam_id, challenge=challenge, uri=kid)

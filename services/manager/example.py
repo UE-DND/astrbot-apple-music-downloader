@@ -1,7 +1,6 @@
 """
-Native Wrapper Manager - Usage Example and Test
-
-This file demonstrates how to use the native wrapper-manager implementation.
+原生 Wrapper 管理器示例与测试。
+演示如何使用原生实现。
 """
 
 import asyncio
@@ -12,14 +11,12 @@ from wrapper_manager_native import (
 
 
 async def example_server():
-    """
-    Example: Start a native wrapper-manager server.
-    """
+    """示例：启动原生 wrapper-manager 服务。"""
     print("=" * 60)
     print("Starting Native Wrapper Manager Server")
     print("=" * 60)
 
-    # Create proxy config
+    # 创建代理配置
     proxy_config = WrapperProxyConfig(
         host="127.0.0.1",
         decrypt_port=10020,
@@ -28,7 +25,7 @@ async def example_server():
         timeout=30
     )
 
-    # Create server
+    # 创建服务
     server = NativeWrapperManagerServer(
         host="127.0.0.1",
         port=18923,
@@ -36,7 +33,7 @@ async def example_server():
     )
 
     try:
-        # Start server
+        # 启动服务
         await server.start()
         print("\n✅ Server started successfully!")
         print(f"   - gRPC endpoint: 127.0.0.1:18923")
@@ -44,7 +41,7 @@ async def example_server():
         print(f"   - Wrapper proxy: 127.0.0.1:20020 (m3u8)")
         print("\nPress Ctrl+C to stop...")
 
-        # Keep running
+        # 保持运行
         await server.wait_for_termination()
 
     except KeyboardInterrupt:
@@ -54,18 +51,16 @@ async def example_server():
 
 
 async def example_client():
-    """
-    Example: Connect to the server as a client.
-    """
+    """示例：作为客户端连接服务。"""
     print("\n" + "=" * 60)
     print("Testing Client Connection")
     print("=" * 60)
 
-    # Import the existing gRPC client
+    # 引入现有 gRPC 客户端
     from ...core.grpc import WrapperManager
 
     try:
-        # Connect to server
+        # 连接服务
         manager = WrapperManager(
             url="127.0.0.1:18923",
             secure=False
@@ -73,7 +68,7 @@ async def example_client():
 
         print("\n🔗 Connecting to wrapper-manager...")
 
-        # Get status
+        # 获取状态
         status = await manager.status()
         print(f"\n✅ Connected successfully!")
         print(f"   - Ready: {status.ready}")
@@ -81,7 +76,7 @@ async def example_client():
         print(f"   - Client count: {status.client_count}")
         print(f"   - Regions: {', '.join(status.regions) if status.regions else 'None'}")
 
-        # Close connection
+        # 关闭连接
         await manager.close()
 
     except Exception as e:
@@ -89,9 +84,7 @@ async def example_client():
 
 
 async def example_standalone_components():
-    """
-    Example: Use components independently without gRPC.
-    """
+    """示例：不依赖 gRPC 独立使用组件。"""
     print("\n" + "=" * 60)
     print("Testing Standalone Components")
     print("=" * 60)
@@ -99,21 +92,21 @@ async def example_standalone_components():
     from .instance_manager import InstanceManager, WrapperProxyConfig
     from .dispatcher import DecryptDispatcher, DecryptTask
 
-    # Create instance manager
+    # 创建实例管理器
     proxy_config = WrapperProxyConfig(
         host="127.0.0.1",
         decrypt_port=10020
     )
     instance_manager = InstanceManager(proxy_config)
 
-    # Create dispatcher
+    # 创建调度器
     dispatcher = DecryptDispatcher(instance_manager)
 
     print("\n📦 Components initialized")
     print(f"   - Instance manager: {instance_manager}")
     print(f"   - Dispatcher: {dispatcher}")
 
-    # Example: Add instance
+    # 示例：添加实例
     print("\n➕ Adding test instance...")
     success, msg, instance = await instance_manager.add_instance(
         username="test@example.com",
@@ -128,22 +121,20 @@ async def example_standalone_components():
     else:
         print(f"   ❌ {msg}")
 
-    # List instances
+    # 列出实例
     instances = instance_manager.list_instances()
     print(f"\n📊 Total instances: {len(instances)}")
     for inst in instances:
         print(f"   - {inst.username} ({inst.region}) - {inst.status.value}")
 
-    # Cleanup
+    # 清理
     print("\n🧹 Cleaning up...")
     await instance_manager.shutdown_all()
     print("   ✅ All instances shut down")
 
 
 async def main():
-    """
-    Main entry point for examples.
-    """
+    """示例主入口。"""
     print("""
 ╔══════════════════════════════════════════════════════════════╗
 ║  Native Wrapper Manager - Python Implementation             ║
@@ -151,7 +142,7 @@ async def main():
 ╚══════════════════════════════════════════════════════════════╝
     """)
 
-    # Choose which example to run
+    # 选择示例
     print("\nAvailable examples:")
     print("1. Start gRPC server")
     print("2. Test client connection (requires server running)")
@@ -168,19 +159,19 @@ async def main():
         await example_standalone_components()
     elif choice == "4":
         print("\n🧪 Running all tests...\n")
-        # Start server in background
+        # 后台启动服务
         from .wrapper_manager_native import NativeWrapperManagerServer
         proxy_config = WrapperProxyConfig()
         server = NativeWrapperManagerServer(proxy_config=proxy_config)
 
         await server.start()
-        await asyncio.sleep(2)  # Wait for server to start
+        await asyncio.sleep(2)  # 等待服务启动
 
-        # Run tests
+        # 执行测试
         await example_client()
         await example_standalone_components()
 
-        # Stop server
+        # 停止服务
         await server.stop()
     else:
         print("Invalid choice")

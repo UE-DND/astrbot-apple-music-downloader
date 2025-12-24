@@ -164,7 +164,6 @@ class DownloadHandler:
         if not storefront:
             storefront = self._plugin.plugin_config.region.storefront
 
-        # 获取歌曲信息（使用新的 downloader_service）
         song_name = None
         song_id = parsed.get("id")
         if song_id and self._plugin.downloader_service:
