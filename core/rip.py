@@ -1,9 +1,6 @@
 """
-Download Core Logic (Rip)
-
-
-Handles the complete song download workflow:
-getMetadata -> getLyrics -> getM3U8 -> downloadSong -> decrypt -> encapsulate -> save
+下载核心流程。
+负责完整下载与封装。
 """
 
 import asyncio
@@ -28,13 +25,12 @@ from .utils import (
 
 logger = logging.getLogger(__name__)
 
-# Enable debug logging for troubleshooting
 logging.basicConfig(level=logging.DEBUG)
 logger.setLevel(logging.DEBUG)
 
 
 class DownloadStatus(Enum):
-    """Download task status."""
+    """下载任务状态。"""
     PENDING = "pending"
     GETTING_METADATA = "getting_metadata"
     GETTING_LYRICS = "getting_lyrics"
@@ -49,36 +45,28 @@ class DownloadStatus(Enum):
 
 @dataclass
 class DownloadTask:
-    """
-    Download task container.
-
-    Holds all state and data for a single song download.
-    """
+    """下载任务容器。"""
     adam_id: str
     storefront: str
     language: str
 
-    # Status
     status: DownloadStatus = DownloadStatus.PENDING
     error_message: Optional[str] = None
 
-    # Metadata
     metadata: Optional[SongMetadata] = None
     m3u8_info: Optional[M3U8Info] = None
     song_info: Optional[SongInfo] = None
 
-    # Decryption state
     decrypted_samples: list = field(default_factory=list)
     decrypted_count: int = 0
     decrypt_event: Optional[asyncio.Event] = None
     decrypt_error: Optional[str] = None
 
-    # Result
     output_path: Optional[str] = None
     actual_codec: Optional[str] = None
 
     def init_decrypted_samples(self):
-        """Initialize the decrypted samples list."""
+        """初始化解密样本列表。"""
         if self.song_info:
             self.decrypted_samples = [None] * len(self.song_info.samples)
             self.decrypted_count = 0
@@ -86,18 +74,18 @@ class DownloadTask:
             self.decrypt_error = None
 
     def is_decrypt_complete(self) -> bool:
-        """Check if all samples have been decrypted."""
+        """检查是否完成全部样本解密。"""
         return self.decrypted_count == len(self.decrypted_samples)
 
     def on_sample_decrypted(self, sample_index: int, sample: bytes):
-        """Handle a decrypted sample."""
+        """处理已解密样本。"""
         self.decrypted_samples[sample_index] = sample
         self.decrypted_count += 1
         if self.is_decrypt_complete() and self.decrypt_event:
             self.decrypt_event.set()
 
     def on_decrypt_failed(self, error: str):
-        """Handle decryption failure."""
+        """处理解密失败。"""
         self.decrypt_error = error
         if self.decrypt_event:
             self.decrypt_event.set()
@@ -105,7 +93,7 @@ class DownloadTask:
 
 @dataclass
 class DownloadConfig:
-    """Configuration for download operations."""
+    """下载配置。"""
     codec: str = Codec.ALAC
     codec_priority: list = field(default_factory=lambda: [Codec.ALAC, Codec.EC3, Codec.AC3, Codec.AAC])
     codec_alternative: bool = True
@@ -130,7 +118,7 @@ class DownloadConfig:
 
 @dataclass
 class DownloadResult:
-    """Result of a download operation."""
+    """下载结果。"""
     success: bool
     status: DownloadStatus
     message: str
@@ -143,15 +131,7 @@ class DownloadResult:
 
 
 class DecryptionManager:
-    """
-    Manages async decryption workflow.
-
-    Handles the gRPC streaming decryption by:
-    1. Initializing the decrypt stream with callbacks
-    2. Queuing samples for decryption
-    3. Collecting decrypted results via callbacks
-    4. Signaling completion when all samples are done
-    """
+    """异步解密流程管理器。"""
 
     def __init__(self, wrapper_manager: Any):
         self.wrapper_manager = wrapper_manager
@@ -161,7 +141,7 @@ class DecryptionManager:
         logger.debug("[DecryptionManager] Created new instance")
 
     async def ensure_initialized(self):
-        """Ensure the decrypt stream is initialized."""
+        """确保解密流已初始化。"""
         logger.debug("[DecryptionManager] ensure_initialized called, current state: initialized=%s", self._initialized)
         async with self._init_lock:
             if not self._initialized:
@@ -182,7 +162,7 @@ class DecryptionManager:
     async def _on_decrypt_success(
         self, adam_id: str, key: str, sample: bytes, sample_index: int
     ):
-        """Callback for successful decryption."""
+        """解密成功回调。"""
         logger.debug(f"[DecryptionManager] _on_decrypt_success called: adam_id={adam_id}, sample_index={sample_index}, sample_size={len(sample) if sample else 0}")
         if adam_id in self._tasks:
             task = self._tasks[adam_id]
@@ -194,9 +174,8 @@ class DecryptionManager:
     async def _on_decrypt_failure(
         self, adam_id: str, key: str, sample: bytes, sample_index: int
     ):
-        """Callback for failed decryption - retry."""
+        """解密失败回调（触发重试）。"""
         logger.warning(f"[DecryptionManager] Decrypt failed for {adam_id} sample {sample_index}, retrying...")
-        # Retry by re-queuing
         try:
             await self.wrapper_manager.decrypt(adam_id, key, sample, sample_index)
             logger.debug(f"[DecryptionManager] Retry queued for {adam_id} sample {sample_index}")
@@ -208,27 +187,16 @@ class DecryptionManager:
         task: DownloadTask,
         timeout: float = 300.0
     ) -> bool:
-        """
-        Decrypt all samples for a song.
-
-        Args:
-            task: DownloadTask with song_info and m3u8_info populated
-            timeout: Maximum time to wait for decryption (seconds)
-
-        Returns:
-            True if all samples decrypted successfully, False otherwise
-        """
+        """解密歌曲全部样本。"""
         logger.info(f"[DecryptionManager] decrypt_song called for {task.adam_id}, timeout={timeout}s")
         logger.debug(f"[DecryptionManager] Task has {len(task.song_info.samples)} samples to decrypt")
 
         await self.ensure_initialized()
 
-        # Register task
         self._tasks[task.adam_id] = task
         logger.debug(f"[DecryptionManager] Task {task.adam_id} registered, total active tasks: {len(self._tasks)}")
 
         try:
-            # Queue all samples for decryption
             total_samples = len(task.song_info.samples)
             logger.info(f"[{task.adam_id}] Queuing {total_samples} samples for decryption...")
 
@@ -251,7 +219,6 @@ class DecryptionManager:
 
             logger.info(f"[{task.adam_id}] All {total_samples} samples queued, waiting for decryption completion...")
 
-            # Wait for all samples to be decrypted
             try:
                 await asyncio.wait_for(task.decrypt_event.wait(), timeout=timeout)
                 logger.info(f"[{task.adam_id}] Decrypt event received, checking results...")
@@ -260,7 +227,6 @@ class DecryptionManager:
                 task.on_decrypt_failed("解密超时")
                 return False
 
-            # Check for errors
             if task.decrypt_error:
                 logger.error(f"[{task.adam_id}] Decryption failed with error: {task.decrypt_error}")
                 return False
@@ -274,18 +240,16 @@ class DecryptionManager:
             return False
 
         finally:
-            # Unregister task
             if task.adam_id in self._tasks:
                 del self._tasks[task.adam_id]
                 logger.debug(f"[{task.adam_id}] Task unregistered, remaining active tasks: {len(self._tasks)}")
 
 
-# Global decryption manager instance (per wrapper_manager)
 _decryption_managers: Dict[int, DecryptionManager] = {}
 
 
 def get_decryption_manager(wrapper_manager: Any) -> DecryptionManager:
-    """Get or create a DecryptionManager for the given wrapper_manager."""
+    """获取或创建 DecryptionManager。"""
     manager_id = id(wrapper_manager)
     if manager_id not in _decryption_managers:
         _decryption_managers[manager_id] = DecryptionManager(wrapper_manager)
@@ -293,12 +257,7 @@ def get_decryption_manager(wrapper_manager: Any) -> DecryptionManager:
 
 
 def resolve_decrypt_key(keys: list[str], desc_index: int) -> tuple[Optional[str], bool]:
-    """
-    Resolve decrypt key for samples. For ALAC streams, all samples share the same SKD key.
-
-    Returns:
-        Tuple of (key, is_prefetch_placeholder)
-    """
+    """解析样本解密密钥。"""
     if not keys:
         return None, False
 
@@ -306,12 +265,10 @@ def resolve_decrypt_key(keys: list[str], desc_index: int) -> tuple[Optional[str]
         key = keys[desc_index]
         return key, key == PREFETCH_KEY
 
-    # Fallback to the first real SKD key if descIndex is out of range.
     real_key = next((k for k in keys if k != PREFETCH_KEY), None)
     if real_key:
         return real_key, False
 
-    # If only PREFETCH exists, return placeholder to signal failure upstream.
     return keys[0], True
 
 
@@ -325,36 +282,10 @@ async def rip_song(
     progress_callback: Optional[Callable[[DownloadStatus, str], None]] = None,
     check_existence: bool = True,
     plugin_config: Any = None,
-    wrapper_service: Any = None,  # Optional: WrapperService for fast decrypt
+    wrapper_service: Any = None,  # 可选：用于快速 decrypt_all
     playlist: Optional[PlaylistInfo] = None
 ) -> DownloadResult:
-    """
-    Download a single song.
-
-    This is the main entry point for downloading songs. It handles:
-    1. Getting metadata from Apple Music API
-    2. Getting lyrics if available
-    3. Getting M3U8 playlist and selecting codec
-    4. Downloading encrypted audio
-    5. Decrypting samples via wrapper service (async callback mode)
-    6. Encapsulating into final format
-    7. Writing metadata
-
-    Args:
-        song_id: Apple Music song ID
-        storefront: Region/storefront code
-        language: Language code
-        config: Download configuration
-        api_client: WebAPI instance
-        wrapper_manager: WrapperManager instance
-        progress_callback: Optional callback for progress updates
-        check_existence: Whether to check if file already exists
-        plugin_config: Plugin configuration for path settings
-        playlist: Optional playlist info for naming
-
-    Returns:
-        DownloadResult with success status and data
-    """
+    """下载单曲并完成解密与封装。"""
     logger.info(f"[rip_song] ========== Starting download for song_id={song_id} ==========")
     logger.info(f"[rip_song] Parameters: storefront={storefront}, language={language}, codec={config.codec}")
     logger.debug(f"[rip_song] Config: save_lyrics={config.save_lyrics}, save_cover={config.save_cover}, force_save={config.force_save}")
@@ -368,7 +299,6 @@ async def rip_song(
         logger.info(f"[{song_id}] Status: {status.value} - {message}")
 
     try:
-        # Step 1: Get song metadata
         update_status(DownloadStatus.GETTING_METADATA, "获取歌曲信息...")
         logger.info(f"[{song_id}] Step 1: Calling api_client.get_song_info...")
 
@@ -381,7 +311,6 @@ async def rip_song(
                 message="无法获取歌曲信息"
             )
 
-        # Get album info for complete metadata
         album_id = None
         if raw_metadata.relationships.albums.data:
             album_id = raw_metadata.relationships.albums.data[0].id
@@ -392,18 +321,15 @@ async def rip_song(
             album_data = None
             logger.info(f"[{song_id}] Step 1b: No album info available")
 
-        # Parse metadata
         logger.debug(f"[{song_id}] Step 1c: Parsing metadata from song data...")
         task.metadata = SongMetadata.parse_from_song_data(raw_metadata)
         if album_data:
             task.metadata.parse_from_album_data(album_data)
         logger.info(f"[{song_id}] Step 1c: Metadata parsed - title={task.metadata.title}, artist={task.metadata.artist}")
 
-        # Step 2: Set playlist index if needed
         if playlist and task.metadata:
             task.metadata.set_playlist_index(playlist.songIdIndexMapping.get(song_id))
 
-        # Step 3: Check if file already exists
         logger.info(f"[{song_id}] Step 3: Checking file existence (check_existence={check_existence}, force_save={config.force_save})")
         if check_existence and plugin_config and not config.force_save:
             if check_song_exists(task.metadata, config.codec, plugin_config, playlist):
@@ -415,7 +341,6 @@ async def rip_song(
                     metadata=task.metadata
                 )
 
-        # Step 4: Get lyrics
         update_status(DownloadStatus.GETTING_LYRICS, "获取歌词...")
         logger.info(f"[{song_id}] Step 4: Getting lyrics (save_lyrics={config.save_lyrics}, hasTimeSyncedLyrics={raw_metadata.attributes.hasTimeSyncedLyrics})")
 
@@ -437,7 +362,6 @@ async def rip_song(
         else:
             logger.info(f"[{song_id}] Step 4: Skipping lyrics (not configured or not available)")
 
-        # Step 4: Get cover
         logger.info(f"[{song_id}] Step 4: Getting cover (save_cover={config.save_cover}, cover_url={task.metadata.cover_url is not None})")
         if config.save_cover and task.metadata.cover_url:
             try:
@@ -454,11 +378,9 @@ async def rip_song(
         else:
             logger.info(f"[{song_id}] Step 4: Skipping cover")
 
-        # Step 5: Get M3U8 and download
         update_status(DownloadStatus.DOWNLOADING, "下载中...")
         logger.info(f"[{song_id}] Step 5: Getting M3U8 and downloading audio...")
 
-        # Check if extended asset URLs are available
         has_extended_urls = raw_metadata.attributes.extendedAssetUrls is not None
         logger.debug(f"[{song_id}] Step 5: extendedAssetUrls available: {has_extended_urls}")
         if not raw_metadata.attributes.extendedAssetUrls:
@@ -469,7 +391,6 @@ async def rip_song(
                 message="该歌曲没有可用的音频资源"
             )
 
-        # Get M3U8 URL
         codec = config.codec
         logger.info(f"[{song_id}] Step 5a: Requested codec={codec}")
         if codec == Codec.ALAC and raw_metadata.attributes.extendedAssetUrls.enhancedHls:
@@ -488,7 +409,6 @@ async def rip_song(
                 message="无法获取音频 M3U8 地址"
             )
 
-        # Extract media info
         logger.info(f"[{song_id}] Step 5b: Extracting media info from M3U8...")
         try:
             logger.debug(f"[{song_id}] Step 5b: Downloading M3U8 content...")
@@ -515,7 +435,6 @@ async def rip_song(
                 message=f"请求的编码格式 {codec} 不可用"
             )
 
-        # Update metadata with audio info
         if task.m3u8_info.bit_depth and task.m3u8_info.sample_rate:
             logger.info(f"[{song_id}] Step 5c: Audio info - bit_depth={task.m3u8_info.bit_depth}, sample_rate={task.m3u8_info.sample_rate}")
             task.metadata.set_bit_depth_and_sample_rate(
@@ -523,12 +442,10 @@ async def rip_song(
                 task.m3u8_info.sample_rate
             )
 
-        # Download raw audio
         logger.info(f"[{song_id}] Step 5d: Downloading raw audio from URI...")
         raw_song = await api_client.download_song(task.m3u8_info.uri)
         logger.info(f"[{song_id}] Step 5d: Raw audio downloaded, size={len(raw_song) if raw_song else 0} bytes")
 
-        # Step 6: Decrypt using async callback mode
         update_status(DownloadStatus.DECRYPTING, "解密中...")
         logger.info(f"[{song_id}] Step 6: Starting decryption...")
 
@@ -542,22 +459,16 @@ async def rip_song(
         task.init_decrypted_samples()
         logger.debug(f"[{song_id}] Step 6c: Initialized decrypted_samples array")
 
-        # DEBUG: Analyze descIndex distribution across all samples
-        from collections import Counter
-
-        desc_index_counts = Counter(sample.descIndex for sample in task.song_info.samples)
-        logger.info(f"[{song_id}] Step 6c-debug: descIndex distribution: {dict(desc_index_counts)}")
-        logger.info(f"[{song_id}] Step 6c-debug: Available keys count: {len(task.m3u8_info.keys)}")
-        for i, k in enumerate(task.m3u8_info.keys):
-            key_preview = k[:60] if k else "None"
-            is_prefetch = "PREFETCH" if k == PREFETCH_KEY else "SKD"
-            logger.info(f"[{song_id}] Step 6c-debug: keys[{i}] = {is_prefetch}: {key_preview}...")
-
         decrypt_success = False
 
-        # Use fast decrypt_all if wrapper_service is available (Native mode)
-        enable_fast_decrypt = False  # 临时关闭 fast decrypt_all，使用稳定的流式解密
-        if enable_fast_decrypt and wrapper_service and hasattr(wrapper_service, 'decrypt_all'):
+        # 优先使用原生模式的快速 decrypt_all，避免逐样本连接带来的性能瓶颈
+        enable_fast_decrypt = False
+        if wrapper_service and hasattr(wrapper_service, "decrypt_all"):
+            mode_value = getattr(getattr(wrapper_service, "mode", None), "value", None)
+            if mode_value is None:
+                mode_value = getattr(wrapper_service, "mode", None)
+            enable_fast_decrypt = mode_value in (None, "native")
+        if enable_fast_decrypt:
             logger.info(f"[{song_id}] Step 6d: Using FAST decrypt_all with per-key grouping...")
 
             total_samples = len(task.song_info.samples)
@@ -569,7 +480,7 @@ async def rip_song(
             decrypt_counter = 0
             fast_error: Optional[str] = None
 
-            # 分组：同一密钥走同一个 decrypt_all
+            # 按密钥分组，复用同一条连接
             for idx, sample in enumerate(task.song_info.samples):
                 key, is_prefetch = resolve_decrypt_key(task.m3u8_info.keys, sample.descIndex)
                 if not key:
@@ -578,11 +489,6 @@ async def rip_song(
                     break
 
                 grouped_samples[key].append((sample.data, idx))
-
-            # 统计各 descIndex 对应的样本数，便于排查
-            desc_index_counts = Counter(sample.descIndex for sample in task.song_info.samples)
-            logger.info(f"[{song_id}] Step 6d-debug: descIndex distribution: {dict(desc_index_counts)}")
-            logger.info(f"[{song_id}] Step 6d-debug: Key groups: {len(grouped_samples)}")
 
             if fast_error is None:
                 decrypt_success = True
@@ -609,7 +515,7 @@ async def rip_song(
                 logger.warning(f"[{song_id}] Fast decrypt_all unavailable or failed, fallback to stream decrypt. Reason: {fast_error or 'unknown'}")
 
         if not decrypt_success:
-            # Fallback to slow DecryptionManager for remote mode或 fast 失败
+            # 远程模式或快速解密失败时回退到流式解密
             logger.info(f"[{song_id}] Step 6d: Using slow DecryptionManager (gRPC stream)...")
             decrypt_manager = get_decryption_manager(wrapper_manager)
             logger.info(f"[{song_id}] Step 6e: Calling decrypt_manager.decrypt_song...")
@@ -629,7 +535,6 @@ async def rip_song(
                     message=error_msg
                 )
 
-        # Step 7: Process and encapsulate
         update_status(DownloadStatus.PROCESSING, "处理中...")
         logger.info(f"[{song_id}] Step 7: Processing and encapsulating...")
 
@@ -641,20 +546,18 @@ async def rip_song(
         song = await run_sync(encapsulate, task.song_info, decrypted_media, config.atmos_convert_to_m4a)
         logger.info(f"[{song_id}] Step 7b: Encapsulation complete, size={len(song) if song else 0} bytes")
 
-        # Post-processing for non-raw Atmos
         is_raw_atmos = if_raw_atmos(actual_codec, config.atmos_convert_to_m4a)
         logger.info(f"[{song_id}] Step 7c: Post-processing (is_raw_atmos={is_raw_atmos}, actual_codec={actual_codec})")
 
         if not is_raw_atmos:
-            # Skip fix_encapsulate for ALAC - FFmpeg removes the ALAC config atom
-            # causing "invalid samples per frame" errors
+            # ALAC 跳过 fix_encapsulate，避免 FFmpeg 移除 ALAC 配置导致帧信息异常
             if actual_codec not in [Codec.EC3, Codec.AC3, Codec.ALAC]:
                 logger.debug(f"[{song_id}] Step 7c: Fixing encapsulation...")
                 song = await run_sync(fix_encapsulate, song)
             else:
                 logger.debug(f"[{song_id}] Step 7c: Skipping fix_encapsulate for codec={actual_codec}")
 
-            # 对 ALAC 暂时跳过写入 metadata，避免额外封装修改导致帧信息损坏
+            # ALAC 暂时跳过写入元数据，避免封装改写导致帧信息损坏
             if actual_codec != Codec.ALAC:
                 logger.debug(f"[{song_id}] Step 7d: Writing metadata...")
                 song = await run_sync(
@@ -667,13 +570,12 @@ async def rip_song(
                 )
                 logger.info(f"[{song_id}] Step 7d: Metadata written")
 
-            # Fix ESDS box for AAC codecs
+            # AAC 需要修复 ESDS box
             if actual_codec in [Codec.AAC, Codec.AAC_DOWNMIX, Codec.AAC_BINAURAL]:
                 logger.debug(f"[{song_id}] Step 7e: Fixing ESDS box for AAC codec...")
                 song = await run_sync(fix_esds_box, task.song_info.raw, song)
                 logger.info(f"[{song_id}] Step 7e: ESDS box fixed")
 
-        # Integrity check
         logger.info(f"[{song_id}] Step 8: Checking file integrity...")
         integrity_ok = await run_sync(check_song_integrity, song)
         logger.info(f"[{song_id}] Step 8: Integrity check result: {integrity_ok}")
@@ -689,7 +591,6 @@ async def rip_song(
             else:
                 logger.warning(f"[{song_id}] Step 8: File integrity check failed, but continuing")
 
-        # Success
         update_status(DownloadStatus.DONE, "完成")
         logger.info(f"[{song_id}] ========== Download completed successfully ==========")
         logger.info(f"[{song_id}] Final song size={len(song) if song else 0} bytes, codec={actual_codec}")
