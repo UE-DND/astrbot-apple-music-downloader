@@ -18,7 +18,7 @@
 - `core/`：API、下载、封装、配置、模型。
 - `core/grpc/`：wrapper-manager gRPC 客户端。
 - `bin/`：wrapper 资产与 rootfs，除非更新 wrapper 否则不动。
-- `ref-code/`：上游参考，本项目已整合其中三个项目的功能，但仍未完善。
+- `ref-code/`：上游代码参考。
 
 ## Build, Test, and Development Commands
 - 依赖：`python -m pip install -r "requirements.txt"`。

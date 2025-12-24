@@ -93,7 +93,7 @@ git clone https://gh-proxy.com/https://github.com/UE-DND/astrbot_apple_music_dow
 
 2. 热重启插件
 
-用于测试的包装器管理器实例：
+用于测试的公共实例：
 
 ```toml
 [instance] # 由 @WorldObservationLog 维护
@@ -184,6 +184,9 @@ python -m core status --config "./newconfig.json"
 
 - Native 模式需要有效的 Apple Music 订阅
 - 部分曲目可能因地区限制不可用
-- 此项目仅供技术交流，下载文件默认 24 小时后自动删除
+- 文件默认于下载 24 小时后自动删除
+- 此项目仅供技术交流，使用此项目即表示完全认识项目功能并对产生的后果承担相关责任
 
-## 感谢所有上游开发者的贡献
+## 致谢
+
+本项目整合了 [AppleMusicDecrypt](https://github.com/WorldObservationLog/AppleMusicDecrypt)、[wrapper-manager](https://github.com/WorldObservationLog/wrapper-manager) 的功能，二进制文件来自 [wrapper](https://github.com/WorldObservationLog/wrapper)。感谢所有上游开发者的贡献！

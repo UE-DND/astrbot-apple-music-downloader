@@ -216,3 +216,4 @@ ref-code/
 logs/
 bin/rootfs/data/data/com.apple.android.music/files
 bin/rootfs/system/bin/linker64
+docs/
