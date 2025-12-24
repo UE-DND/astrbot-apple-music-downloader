@@ -4,7 +4,7 @@
     "type": "string",
     "default": "native",
     "options": ["native", "remote"],
-    "hint": "native:（推荐）; remote: 远程服务（wm.wol.moe / wm1.wol.moe）"
+    "hint": "native ; remote"
   },
   "wrapper_url": {
     "description": "Wrapper-Manager 服务地址",
@@ -16,7 +16,7 @@
     "description": "使用 TLS 加密",
     "type": "bool",
     "default": false,
-    "hint": "是否使用 TLS/SSL 连接，公共实例(wm.wol.moe / wm1.wol.moe)需设为 true"
+    "hint": "是否使用 TLS/SSL 连接。remote 模式下需为 true"
   },
   "queue_config": {
     "description": "下载队列配置",
@@ -161,7 +161,7 @@
       "cover_format": {
         "description": "封面格式",
         "type": "string",
-        "default": "jpg",
+        "default": "png",
         "options": ["jpg", "png"]
       },
       "cover_size": {
@@ -260,6 +260,6 @@
     "description": "调试模式",
     "type": "bool",
     "default": true,
-    "hint": "启用后会输出详细的调试信息"
+    "hint": "启用后输出详细日志"
   }
 }

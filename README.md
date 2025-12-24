@@ -9,41 +9,41 @@ cd AstrBot/data/plugins
 git clone https://gh-proxy.com/https://github.com/UE-DND/astrbot_apple_music_downloader.git
 ```
 
-重启 AstrBot 以自动识别插件
+重启 AstrBot 以自动识别插件，插件重启后需要5~10分钟以安装所有组件
 
 ## 通过 AstrBot 框架使用
 
-### 1. 检查服务状态
+1. **检查服务状态**
 
-```bot
-/am_status
-```
+   ```bot
+   /am_status
+   ```
 
-### 2. 登录 Apple Music 账户
+2. **登录 Apple Music 账户**
 
-```bot
-/am_login 你的AppleID 密码
-```
+   ```bot
+   /am_login 你的AppleID 密码
+   ```
 
-如需 2FA 验证，输入收到的 6 位验证码：
+3. **如需 2FA 验证，输入收到的 6 位验证码：**
 
-```bot
-/am_2fa 123456
-```
+   ```bot
+   /am_2fa 123456
+   ```
 
-### 3. 下载音乐
+4. **下载音乐**
 
-```bot
-/am https://music.apple.com/cn/album/xxx/123?i=456
-```
+   ```bot
+   /am https://music.apple.com/cn/album/xxx/123?i=456
+   ```
 
-指定下载音质
+   **指定下载音质**
 
-```bot
-/am https://music.apple.com/cn/album/xxx/123?i=456 aac
-```
+   ```bot
+   /am https://music.apple.com/cn/album/xxx/123?i=456 aac
+   ```
 
-## 指令概览
+### 指令概览
 
 | 指令 | 说明 |
 |:-----|:-----|
@@ -57,37 +57,6 @@ git clone https://gh-proxy.com/https://github.com/UE-DND/astrbot_apple_music_dow
 | `/am_status` | 服务状态 |
 | `/am_help` | 显示帮助 |
 
-## 通过 CLI 使用
-
-在仓库根目录执行：
-
-```bash
-python -m core status
-python -m core login --u example@gamil.com --p pwd
-python -m core download --l "https://music.apple.com/cn/album/xxx/123?i=456" --q alac
-python -m core accounts
-python -m core logout --u example@gmail.com
-```
-
-CLI 方式会自动读取 `_conf_schema.json` 默认值
-
-使用方式：
-
-```bash
-python -m core status --config "./config.json"
-```
-
-CLI 方式支持专辑、歌单、艺术家批量下载：
-
-```bash
-python -m core download --l "https://music.apple.com/cn/album/xxx/123"
-python -m core download --l "https://music.apple.com/cn/playlist/xxx/pl.u-xxxxx"
-python -m core download --l "https://music.apple.com/cn/artist/xxx/123"
-python -m core download --l "https://music.apple.com/cn/artist/xxx/123" --include-participate-songs
-```
-
-## 配置文件选项
-
 ### 音质选项
 
 | 参数 | 说明 |
@@ -95,35 +64,22 @@ python -m core download --l "https://music.apple.com/cn/artist/xxx/123" --includ
 | `alac` | 无损（默认）|
 | `aac` | AAC |
 
-> 插件仅支持 `alac` 与 `aac` 音质。
+> 插件仅支持 `alac` 与 `aac` 音质
 
-### CLI 音质选项
+### 插件配置项
 
-| 参数 | 说明 |
-|:-----|:-----|
-| `alac` | 无损（默认） |
-| `ec3` | 杜比全景声 |
-| `ac3` | 杜比数字 |
-| `aac` | AAC |
-| `aac-binaural` | AAC Binaural |
-| `aac-downmix` | AAC Downmix |
-| `aac-legacy` | AAC Legacy |
-
-### Native 模式（推荐，默认）
+#### Native 模式（推荐，默认）
 
 > 💡 Native 模式需要登录 AppleMusic 账户
 
 1. 默认配置即可使用，无需修改
 2. 或在 WebUI 中设置 `wrapper_mode` 为 `native`
 
-### Remote 模式（公共实例）
+#### Remote 模式（公共实例）
 
 > 💡 使用公共实例时无需登录账户
 
-1. 在 AstrBot WebUI 中修改配置：
-   - `wrapper_mode`
-   - `wrapper_url`
-   - `wrapper_secure`
+1. 在 AstrBot WebUI 中修改 `Wrapper 服务模式` 和 `Wrapper-Manager 服务地址`
 
 2. 热重启插件
 
@@ -138,6 +94,81 @@ secure = true
 url = "wm1.wol.moe"
 secure = true
 ```
+
+## 通过 CLI 使用
+
+在仓库根目录执行：
+
+CLI 方式会自动读取 `_conf_schema.json` 以获取 Astrbot 配置
+
+若使用其他配置文件，使用此命令切换：
+
+```bash
+python -m core status --config "./newconfig.json"
+```
+
+### CLI 命令与用法
+
+#### 全局参数
+
+```bash
+--wrapper-mode <native|remote>
+--wrapper-url <host:port>
+--wrapper-secure
+--wrapper-insecure
+--storefront <地区代码>
+--language <语言>
+--download-dir <下载目录>
+--default-quality <alac|ec3|ac3|aac|aac-binaural|aac-downmix|aac-legacy>
+--debug
+--no-debug
+```
+
+> 全局参数仅对当前对话有效，初始化时以 `--config` 指向的配置文件为准
+
+#### 常用命令
+
+1. status：查看服务状态
+
+   ```bash
+   python -m core status [全局参数]
+   ```
+
+2. accounts：查看账户状态
+
+   ```bash
+   python -m core accounts [全局参数]
+   ```
+
+3. login：登录账户（支持 2FA 交互）
+
+   ```bash
+   python -m core login -u <AppleID> -p <密码> [全局参数]
+   ```
+
+4. logout：登出账户
+
+   ```bash
+   python -m core logout -u <AppleID> [全局参数]
+   ```
+
+5. download：下载歌曲/专辑/歌单/艺术家
+
+   ```bash
+   python -m core download -l <链接> [-q <音质>] [--force] [--include-participate-songs] [全局参数]
+   ```
+
+#### CLI 音质选项
+
+| 参数 | 说明 |
+|:-----|:-----|
+| `alac` | 无损（默认） |
+| `ec3` | 杜比全景声 |
+| `ac3` | 杜比数字 |
+| `aac` | AAC |
+| `aac-binaural` | AAC Binaural |
+| `aac-downmix` | AAC Downmix |
+| `aac-legacy` | AAC Legacy |
 
 ## ⚠️ 注意
 
